@@ -2,31 +2,39 @@
   "schemaVersion": 2,
   "assetKind": "routine",
   "assets": {
-    "auto_task_scheduler": "603e89b4bd90234f1bd9c9eafbfc232bd45126e949376c6a4ca0546efa9cb628",
+    "ci_failure_sweep": "80a6e6cb10ebe5cfbe48628801622f5cac855ac192582eecf03b64b84689b5d9",
+    "dependabot_alert_sweep": "324077bc7b576355952939d8b6739801029e888a8f3286f05bd272e98fcb0731",
     "ship_sweep": "3257f10c91516796dab5f914c8f3e7a13ce4696fb10eeb6a9c6698f64e46bd18",
     "task_pilot": "459b6351e46ec645cbb7a01c7a420d0ea5117479996279c7929f0d36888f61d6",
-    "task_triage": "a748b5f59a24fa02ad4a0bdb8eb7b73648807226544c7e75749e597ed178b2e5",
-    "worktree_gc": "efd0aa525f65c9827fd7f846082e48b26a04c36e3adb3b39f02371278d9ee9ff"
+    "worktree_gc": "8b32a226658fd6df76c607810b586a39c87c7c57d7aa8de68af41dad5d4be218"
   },
   "routineProvenance": {
+    "ci_failure_sweep": {
+      "templateDigest": "6df59a489a126748609f96594ddf9d9c0a2ce57862c7ee4b70a715137155a421",
+      "renderedDigest": "80a6e6cb10ebe5cfbe48628801622f5cac855ac192582eecf03b64b84689b5d9",
+      "binding": {
+        "name": "ci-failure-sweep-dsearch"
+      }
+    },
+    "dependabot_alert_sweep": {
+      "templateDigest": "da691ec375f100347b657c0221c2b55c35eafbe498a247676743e9e30650a716",
+      "renderedDigest": "324077bc7b576355952939d8b6739801029e888a8f3286f05bd272e98fcb0731",
+      "binding": {
+        "name": "dependabot-alert-sweep-dsearch"
+      }
+    },
     "ship_sweep": {
       "templateDigest": "416134b342e33f1b2565b88bc2e41b885a39b21c02324f0c8ed79bec74c562d1",
       "renderedDigest": "3257f10c91516796dab5f914c8f3e7a13ce4696fb10eeb6a9c6698f64e46bd18",
       "binding": {
-        "name": "ship-sweep-dsearch",
-        "hosts": [
-          "Daniels-Mac-mini.local"
-        ]
+        "name": "ship-sweep-dsearch"
       }
     },
-    "task_triage": {
-      "templateDigest": "21feb397078d47165a0e2a618e8f0dfc97cdbd02c60d0595d71b43b20abd7c5e",
-      "renderedDigest": "a748b5f59a24fa02ad4a0bdb8eb7b73648807226544c7e75749e597ed178b2e5",
+    "worktree_gc": {
+      "templateDigest": "17a1fe2182a607f6391c5d73b958c3a1cfb83288811a199702da110b5b32fb0c",
+      "renderedDigest": "8b32a226658fd6df76c607810b586a39c87c7c57d7aa8de68af41dad5d4be218",
       "binding": {
-        "name": "task-triage-dsearch",
-        "hosts": [
-          "Daniels-Mac-mini.local"
-        ]
+        "name": "worktree-gc-dsearch"
       }
     }
   }

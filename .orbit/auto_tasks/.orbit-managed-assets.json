@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "assetKind": "auto_task",
   "assets": {
-    "code-review": "02955b94dd2176395ab8af131ef05d05b148ea2a2ddb42ef8a9f58703b425d8a",
-    "delivery-code-review": "9f67e270711b6b346abc289eec8cd4effef01f7792f6cdae97269ad40ad8999c",
-    "delivery-qa": "9a5ec9690a3bf2db43233416fb91c460c37bed97580e37144fc40b63fdf21abf",
+    "code-review": "d24841e1ad2e39df7cf882846557925385db73e31d69e33c5e5888d9c2fb22d1",
+    "delivery-code-review": "4b65eae185555222feca8c41d48503c946796471233000ec192e8bd7fcecd9fd",
+    "delivery-qa": "f06f2c8a6fbdc1392d2cb2bcc74b5c9afb2101deb15cba85798d0ab67fac4ce3",
     "friction-curation": "08bbe4472532fe7920c78ee3e6f338da8c9cfead1d329feeaf6bac39d4946bad",
     "qa-sweep": "d77c33b62c37ee81469676b7e7af31e504a84e5bf610646db62688b26f130708",
     "security-review": "2cdd0b9b5a69cb118fa2e568c71e7db43d48cd3840d2de7bd90fd3c21cf3b607"
