@@ -1,5 +1,5 @@
 # Multi-architecture index digest for maven:3.9.11-eclipse-temurin-21.
-FROM --platform=$BUILDPLATFORM maven:3.9.11-eclipse-temurin-21@sha256:6fdc855a6ed81d288ca7ca37ac6ff5e9308b612485c0801d70b25a858c83d237 AS build
+FROM --platform=$BUILDPLATFORM maven:3.9.15-eclipse-temurin-26@sha256:029a8e2838ae68238ffb8be407cddbb3f07d4d839c60c6f26c619a69fd184531 AS build
 WORKDIR /app
 COPY . .
 RUN --mount=type=cache,target=/root/.m2 mvn -B -ntp clean package -pl dk.query-node -am
