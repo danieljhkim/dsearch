@@ -98,9 +98,12 @@ then removed.
 If a replicated commit returns an uncertain failure, that shard is write-fenced for the lifetime
 of the manager and its uncommitted writer state is rolled back on close. Restart resolves the
 outcome from the latest valid Lucene commit. The coordinator repair loop compares each physical
-copy's logical partition, primary identity, placement generation, highest committed operation,
-document count, and canonical content checksum. Missing, lagging, wrong-generation, and divergent
-copies remain ineligible while a full checksummed snapshot is transferred and atomically installed.
+copy's logical partition, primary identity, placement generation, maximum per-document operation
+generation, document count, and canonical content checksum. The maximum is diagnostic, not a shard
+commit position that can order two different histories. A missing copy can receive a full checksummed
+snapshot from matching observed copies. Existing copies with conflicting manifests remain ineligible
+and are preserved for manual resolution; automatic repair cannot establish which one retained every
+acknowledged write.
 
 ## Reads and failover
 

@@ -924,6 +924,8 @@ public class IndexManager implements Closeable {
             flushShardBufferLocked(shardId, shard, buffer);
             ReplicaIdentity identity = replicaIdentities.getOrDefault(shardId, new ReplicaIdentity(shardId, ""));
             List<Map.Entry<String, AppliedMutation>> mutations = shardMutations(shardId);
+            // Operation generations are per document. This maximum is diagnostic only and
+            // cannot order two distinct shard histories for destructive replica repair.
             long committedPosition = mutations.stream()
                     .mapToLong(entry -> entry.getValue().operationGeneration())
                     .max()

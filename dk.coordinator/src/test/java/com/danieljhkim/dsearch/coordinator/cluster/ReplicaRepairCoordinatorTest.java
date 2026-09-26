@@ -63,7 +63,7 @@ class ReplicaRepairCoordinatorTest {
     @Test
     void transfersBoundedChunksAndRequiresACompleteRecheckBeforeEligibility() throws Exception {
         byte[] snapshot = "snapshot".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        try (TestCluster cluster = new TestCluster(manifest(9, 42, "good"), manifest(9, 40, "old"), snapshot)) {
+        try (TestCluster cluster = new TestCluster(manifest(9, 42, "good"), null, snapshot)) {
             cluster.coordinator.reconcile();
 
             ReplicaRepairStatus completed = onlyRepair(cluster.membership);
@@ -92,7 +92,7 @@ class ReplicaRepairCoordinatorTest {
     @Test
     void failedVerificationStaysIneligibleAndAReconciliationRetryConverges() throws Exception {
         byte[] snapshot = "retryable-snapshot".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        try (TestCluster cluster = new TestCluster(manifest(9, 42, "good"), manifest(9, 41, "old"), snapshot)) {
+        try (TestCluster cluster = new TestCluster(manifest(9, 42, "good"), null, snapshot)) {
             cluster.target.finishOverride = manifest(9, 42, "wrong-checksum");
 
             cluster.coordinator.reconcile();
@@ -119,6 +119,55 @@ class ReplicaRepairCoordinatorTest {
 
             assertTrue(cluster.membership.isReplicaEligible("target"));
             assertEquals(2, cluster.target.finishCalls);
+        }
+    }
+
+    @Test
+    void equalPerDocumentMaximumCannotOverwriteTheOnlyCompleteCopy() throws Exception {
+        ReplicaManifest incompletePrimary =
+                manifest(9, 1, "document-A").toBuilder().setDocumentCount(1).build();
+        ReplicaManifest completeFollower = manifest(9, 1, "documents-A-and-B").toBuilder()
+                .setDocumentCount(2)
+                .build();
+        byte[] completeSnapshot = "A,B".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        try (TestCluster cluster = new TestCluster(incompletePrimary, completeFollower, "A".getBytes())) {
+            cluster.target.snapshot = completeSnapshot;
+
+            cluster.coordinator.reconcile();
+            cluster.coordinator.reconcile();
+
+            assertEquals(0, cluster.source.beginCalls);
+            assertEquals(0, cluster.target.beginCalls);
+            assertArrayEquals(completeSnapshot, cluster.target.snapshot);
+            assertEquals(completeFollower, cluster.target.manifest);
+            assertEquals(
+                    ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKSUM_DIVERGENT,
+                    cluster.membership.replicaRepairState("source"));
+            assertEquals(
+                    ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKSUM_DIVERGENT,
+                    cluster.membership.replicaRepairState("target"));
+            assertFalse(cluster.membership.isReplicaEligible("source"));
+            assertFalse(cluster.membership.isReplicaEligible("target"));
+            assertEquals(
+                    ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKSUM_DIVERGENT,
+                    onlyRepair(cluster.membership).getState());
+        }
+    }
+
+    @Test
+    void higherPerDocumentMaximumDoesNotProveShardHistoryOrdering() throws Exception {
+        try (TestCluster cluster =
+                new TestCluster(manifest(9, 2, "document-A"), manifest(9, 1, "documents-A-and-B"), "A".getBytes())) {
+            cluster.coordinator.reconcile();
+
+            assertEquals(0, cluster.source.beginCalls);
+            assertEquals(0, cluster.target.beginCalls);
+            assertEquals(
+                    ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKSUM_DIVERGENT,
+                    cluster.membership.replicaRepairState("source"));
+            assertEquals(
+                    ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKSUM_DIVERGENT,
+                    cluster.membership.replicaRepairState("target"));
         }
     }
 
@@ -210,7 +259,7 @@ class ReplicaRepairCoordinatorTest {
 
     private static final class RepairService extends IndexServiceGrpc.IndexServiceImplBase {
         private ReplicaManifest manifest;
-        private final byte[] snapshot;
+        private byte[] snapshot;
         private ReplicaManifest acceptedManifest;
         private ReplicaManifest finishOverride;
         private final ByteArrayOutputStream received = new ByteArrayOutputStream();
@@ -228,9 +277,11 @@ class ReplicaRepairCoordinatorTest {
         @Override
         public void listReplicaManifests(
                 ListReplicaManifestsRequest request, StreamObserver<ListReplicaManifestsResponse> observer) {
-            observer.onNext(ListReplicaManifestsResponse.newBuilder()
-                    .addManifests(manifest)
-                    .build());
+            ListReplicaManifestsResponse.Builder response = ListReplicaManifestsResponse.newBuilder();
+            if (manifest != null) {
+                response.addManifests(manifest);
+            }
+            observer.onNext(response.build());
             observer.onCompleted();
         }
 

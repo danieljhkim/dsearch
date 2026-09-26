@@ -18,6 +18,28 @@ class ReplicaRepairStoreTest {
     Path tempDir;
 
     @Test
+    void perDocumentGenerationsCannotOrderDifferentShardContents() throws Exception {
+        try (IndexManager incomplete = manager(tempDir.resolve("incomplete"));
+                IndexManager complete = manager(tempDir.resolve("complete"))) {
+            apply(incomplete, "doc-A", "first", 1);
+            apply(complete, "doc-A", "first", 1);
+            apply(complete, "doc-B", "second", 1);
+
+            IndexManager.ReplicaManifestData incompleteManifest = incomplete.replicaManifest("tenant_r1");
+            IndexManager.ReplicaManifestData completeManifest = complete.replicaManifest("tenant_r1");
+            assertEquals(1, incompleteManifest.committedPosition());
+            assertEquals(1, completeManifest.committedPosition());
+            assertEquals(1, incompleteManifest.documentCount());
+            assertEquals(2, completeManifest.documentCount());
+            assertNotEquals(incompleteManifest.contentChecksum(), completeManifest.contentChecksum());
+            assertEquals(
+                    1,
+                    complete.searchDocument("tenant_r1", "second", 10, 0, SearchType.BM25)
+                            .getTotalHits());
+        }
+    }
+
+    @Test
     void interruptedTransferResumesAfterTargetRestartAndInstallsCommittedSnapshot() throws Exception {
         Path sourcePath = tempDir.resolve("source");
         Path targetPath = tempDir.resolve("target");
