@@ -62,6 +62,8 @@ services:
     environment:
       GATEWAY_PORT: "8080"
       GATEWAY_HEALTH_PORT: "8180"
+      # Shared with admin API; absent token disables non-health Actuator access.
+      DSEARCH_ADMIN_TOKEN: "${DSEARCH_ADMIN_TOKEN:-}"
       COORDINATOR_HOST: "dsearch-coordinator"
       COORDINATOR_PORT: "7000"
       APP_CONFIG_PATH: "app-config.docker.yaml"

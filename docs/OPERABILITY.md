@@ -71,7 +71,7 @@ manual exercise.
 | `fault-timeline.jsonl` | One JSON object per event with a UTC timestamp and elapsed seconds: `scenario_started`, `fault_injected`, `assertion_passed`, `recovery_complete`, `fault_removed`, `scenario_passed` |
 | `resilience-report.json` | Machine-readable per-scenario record: fault injection and removal timestamps, recovery duration, scenario duration, and every assertion |
 | `resilience-report.md` | The same record as a summary table plus the assertion list |
-| `metrics/<scenario>-<phase>.prom` | Gateway `/actuator/prometheus` scrape before, during, and after each fault |
+| `metrics/<scenario>-<phase>.prom` | Gateway `/actuator/prometheus` scrape with the admin bearer token before, during, and after each fault |
 | `<scenario>-after-services.log` | Timestamped per-scenario Compose log slice |
 | `compose.log`, `compose-ps.txt`, `container-inspect.json`, `compose-config.yaml` | Full container and service diagnostics at teardown |
 | `bursts/request-overload-<attempt>/` | Per-request status, wall time, response body, and response headers for every request in the overload burst |
@@ -88,6 +88,10 @@ scripts/docker-cluster-resilience.sh
 # Or through the Makefile, which also names the diagnostics directory.
 make resilience
 ```
+
+The script generates a run-local `DSEARCH_ADMIN_TOKEN` if none is supplied, passes it to the
+Compose gateway, and uses it for metrics snapshots. Gateway health and readiness probes do not
+require this token. Production scrapers must provide the token as a bearer credential.
 
 The script builds the four images locally, owns its own Compose project name, and tears the project
 down — including volumes — on exit. It publishes the otherwise-unpublished node health endpoints on

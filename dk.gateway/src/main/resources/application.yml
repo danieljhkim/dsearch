@@ -20,11 +20,16 @@ logging:
     console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%thread] %logger{36} - [reqId=%X{requestId}] %msg%n"
 
 management:
+  # Health probes stay public. All other /actuator routes require DSEARCH_ADMIN_TOKEN.
+  # Actuator runs on the gateway HTTP listener, so never expose a tokenless scrape.
   endpoints:
     web:
       exposure:
         include: health,info,metrics,prometheus
   endpoint:
+    health:
+      probes:
+        enabled: true
     prometheus:
       enabled: true
   metrics:
