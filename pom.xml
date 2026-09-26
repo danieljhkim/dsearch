@@ -56,7 +56,7 @@
         <jackson.version>2.21.5</jackson.version>
         <snakeyaml.version>2.4</snakeyaml.version>
         <!-- ML -->
-        <djl.version>0.36.0</djl.version>
+        <djl.version>0.37.0</djl.version>
         <!-- Logging -->
         <logback.version>1.5.34</logback.version>
         <log4j2.version>2.25.5</log4j2.version>
