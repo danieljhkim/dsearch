@@ -408,6 +408,12 @@ The Gateway uses **Spring Boot Actuator + Micrometer + Prometheus registry**:
   - `GET http://localhost:8080/actuator/metrics/dsearch.index.http` – HTTP index handler metric
   - `GET http://localhost:8080/actuator/prometheus` – Prometheus scrape endpoint
 
+  These endpoints and `/actuator/info` require `Authorization: Bearer $DSEARCH_ADMIN_TOKEN`.
+  Configure `DSEARCH_ADMIN_TOKEN` for the gateway in Compose before scraping. A missing token
+  disables non-health Actuator access. Only `/actuator/health`, `/actuator/health/liveness`,
+  and `/actuator/health/readiness` remain unauthenticated for probes; the existing `/health`
+  and `/cluster/health` routes remain available. Keep the bearer token out of logs and client code.
+
 - **Key metrics** (examples):
   - `dsearch.search.http` – high‑level timing for the `/api/v1/search` handler.
   - `dsearch.gateway.search.latency{searchType,shardId}` – fine‑grained latency per search type and shard.

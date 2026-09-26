@@ -102,6 +102,8 @@ cleanup() {
 trap cleanup EXIT
 
 require_commands docker openssl curl jq xargs
+DSEARCH_ADMIN_TOKEN=${DSEARCH_ADMIN_TOKEN:-$(openssl rand -hex 32)}
+export DSEARCH_ADMIN_TOKEN
 docker info >/dev/null
 docker compose version >/dev/null
 
@@ -180,7 +182,9 @@ record_event() {
 
 snapshot_metrics() {
   local phase=$1
-  curl --silent --show-error --max-time 10 "$gateway_base_url/actuator/prometheus" \
+  curl --silent --show-error --fail --max-time 10 \
+    --header "Authorization: Bearer $DSEARCH_ADMIN_TOKEN" \
+    "$gateway_base_url/actuator/prometheus" \
     >"$diagnostics_dir/metrics/${current_scenario}-${phase}.prom" 2>/dev/null || true
 }
 
