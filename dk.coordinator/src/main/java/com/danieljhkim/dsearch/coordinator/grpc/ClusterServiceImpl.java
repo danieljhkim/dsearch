@@ -290,9 +290,15 @@ public class ClusterServiceImpl extends ClusterServiceGrpc.ClusterServiceImplBas
     public void controlReplicaRepairs(
             ControlReplicaRepairsRequest request, StreamObserver<ControlReplicaRepairsResponse> responseObserver) {
         try {
-            if (GrpcPeerIdentityContext.current() == null) {
+            GrpcPeerIdentity identity = GrpcPeerIdentityContext.current();
+            if (identity == null) {
                 throw Status.UNAUTHENTICATED
                         .withDescription("Replica repair control requires an authenticated identity")
+                        .asRuntimeException();
+            }
+            if (identity.role() != GrpcPeerIdentity.IdentityRole.ADMIN) {
+                throw Status.PERMISSION_DENIED
+                        .withDescription("Replica repair control requires an admin identity")
                         .asRuntimeException();
             }
             boolean success =
