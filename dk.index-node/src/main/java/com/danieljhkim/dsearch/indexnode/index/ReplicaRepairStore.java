@@ -41,8 +41,9 @@ public final class ReplicaRepairStore {
         if (maxBytes < 1) {
             throw new IllegalArgumentException("max_snapshot_bytes must be positive");
         }
-        IndexManager.ReplicaManifestData manifest = indexManager.replicaManifest(shardId);
-        byte[] payload = indexManager.createReplicaSnapshot(shardId, maxBytes);
+        IndexManager.ReplicaSnapshotData captured = indexManager.captureReplicaSnapshot(shardId, maxBytes);
+        IndexManager.ReplicaManifestData manifest = captured.manifest();
+        byte[] payload = captured.payload();
         String checksum = sha256(payload);
         String snapshotId = shardId + "-" + checksum;
         SourceSnapshot snapshot = new SourceSnapshot(snapshotId, payload, checksum, manifest);
@@ -152,9 +153,18 @@ public final class ReplicaRepairStore {
                     || Long.parseLong(metadata.getProperty("placementGeneration")) != actual.placementGeneration()) {
                 throw new IOException("installed replica does not match source manifest");
             }
-            deleteRecursively(directory);
+            clearRepairsForShard(shardId);
             indexManager.clearReplicaRepair(shardId);
-            return actual;
+            return new IndexManager.ReplicaManifestData(
+                    actual.shardId(),
+                    actual.logicalPartitionId(),
+                    actual.primaryNodeId(),
+                    actual.placementGeneration(),
+                    actual.committedPosition(),
+                    actual.contentChecksum(),
+                    actual.documentCount(),
+                    "ready",
+                    "");
         } catch (IOException | RuntimeException e) {
             metadata.setProperty("state", "failed");
             metadata.setProperty(
@@ -185,6 +195,17 @@ public final class ReplicaRepairStore {
             }
         } catch (IOException e) {
             throw new IllegalStateException("Failed to restore replica repair fences", e);
+        }
+    }
+
+    private void clearRepairsForShard(String shardId) throws IOException {
+        try (Stream<Path> paths = Files.list(repairRoot)) {
+            for (Path path : paths.filter(Files::isDirectory).toList()) {
+                Path metadata = path.resolve(METADATA);
+                if (Files.exists(metadata) && shardId.equals(load(metadata).getProperty("shardId"))) {
+                    deleteRecursively(path);
+                }
+            }
         }
     }
 
