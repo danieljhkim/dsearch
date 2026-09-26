@@ -13,6 +13,8 @@ import com.danieljhkim.dsearch.common.enums.RoutingStrategy;
 import com.danieljhkim.dsearch.common.grpc.GrpcPeerIdentity;
 import com.danieljhkim.dsearch.common.grpc.GrpcPeerIdentityContext;
 import com.danieljhkim.dsearch.coordinator.cluster.ClusterMembershipService;
+import com.danieljhkim.dsearch.proto.cluster.ControlReplicaRepairsRequest;
+import com.danieljhkim.dsearch.proto.cluster.ControlReplicaRepairsResponse;
 import com.danieljhkim.dsearch.proto.cluster.DeregisterNodeRequest;
 import com.danieljhkim.dsearch.proto.cluster.DeregisterNodeResponse;
 import com.danieljhkim.dsearch.proto.cluster.GetClusterInfoRequest;
@@ -25,6 +27,8 @@ import com.danieljhkim.dsearch.proto.cluster.NodeInfo;
 import com.danieljhkim.dsearch.proto.cluster.NodeRole;
 import com.danieljhkim.dsearch.proto.cluster.RegisterNodeRequest;
 import com.danieljhkim.dsearch.proto.cluster.RegisterNodeResponse;
+import com.danieljhkim.dsearch.proto.cluster.ReplicaRepairState;
+import com.danieljhkim.dsearch.proto.cluster.ReplicaRepairStatus;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import java.util.List;
@@ -199,6 +203,83 @@ class ClusterServiceImplTest {
                         deregistrationObserver));
         assertNull(deregistrationObserver.error);
         assertNull(membershipService.getIndexGroup().getNode("node-a"));
+    }
+
+    @Test
+    void replicaRepairControlsRejectNodeIdentitiesWithoutChangingRepairState() {
+        ClusterMembershipService membershipService = new ClusterMembershipService(appConfig());
+        ClusterServiceImpl service = new ClusterServiceImpl(membershipService);
+        ReplicaRepairStatus repair = repairStatus();
+        membershipService.recordRepairStatus(repair);
+        membershipService.updateReplicaNodeState("target-node", ReplicaRepairState.REPLICA_REPAIR_STATE_FAILED);
+
+        for (NodeRole role : List.of(NodeRole.NODE_ROLE_INDEX, NodeRole.NODE_ROLE_QUERY)) {
+            GrpcPeerIdentity nodeIdentity = GrpcPeerIdentity.node(role, "node-a");
+            for (String action : List.of("pause", "resume", "retry")) {
+                CapturingObserver<ControlReplicaRepairsResponse> observer = new CapturingObserver<>();
+                GrpcPeerIdentityContext.runAs(
+                        nodeIdentity, () -> service.controlReplicaRepairs(controlRequest(action), observer));
+
+                assertStatus(
+                        observer.error,
+                        Status.Code.PERMISSION_DENIED,
+                        "Replica repair control requires an admin identity");
+                assertFalse(membershipService.repairsPaused());
+                assertEquals(List.of(repair), membershipService.repairStatuses());
+                assertEquals(
+                        ReplicaRepairState.REPLICA_REPAIR_STATE_FAILED,
+                        membershipService.replicaRepairState("target-node"));
+            }
+        }
+    }
+
+    @Test
+    void adminIdentityCanPauseResumeAndRetryReplicaRepairs() {
+        ClusterMembershipService membershipService = new ClusterMembershipService(appConfig());
+        ClusterServiceImpl service = new ClusterServiceImpl(membershipService);
+        membershipService.recordRepairStatus(repairStatus());
+        membershipService.updateReplicaNodeState("target-node", ReplicaRepairState.REPLICA_REPAIR_STATE_FAILED);
+
+        ControlReplicaRepairsResponse paused = controlReplicaRepairsAsAdmin(service, "pause");
+        assertTrue(paused.getSuccess());
+        assertTrue(paused.getPaused());
+        assertTrue(membershipService.repairsPaused());
+
+        ControlReplicaRepairsResponse resumed = controlReplicaRepairsAsAdmin(service, "resume");
+        assertTrue(resumed.getSuccess());
+        assertFalse(resumed.getPaused());
+        assertFalse(membershipService.repairsPaused());
+        assertEquals(
+                ReplicaRepairState.REPLICA_REPAIR_STATE_FAILED, membershipService.replicaRepairState("target-node"));
+
+        ControlReplicaRepairsResponse retried = controlReplicaRepairsAsAdmin(service, "retry");
+        assertTrue(retried.getSuccess());
+        ReplicaRepairStatus repair = membershipService.repairStatuses().getFirst();
+        assertEquals(ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKING, repair.getState());
+        assertEquals("", repair.getLastError());
+        assertEquals(
+                ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKING, membershipService.replicaRepairState("target-node"));
+    }
+
+    @Test
+    void replicaRepairControlsRejectUnauthenticatedCallerWithoutChangingState() {
+        ClusterMembershipService membershipService = new ClusterMembershipService(appConfig());
+        ClusterServiceImpl service = new ClusterServiceImpl(membershipService);
+        ReplicaRepairStatus repair = repairStatus();
+        membershipService.recordRepairStatus(repair);
+        membershipService.updateReplicaNodeState("target-node", ReplicaRepairState.REPLICA_REPAIR_STATE_FAILED);
+        CapturingObserver<ControlReplicaRepairsResponse> observer = new CapturingObserver<>();
+
+        service.controlReplicaRepairs(controlRequest("pause"), observer);
+
+        assertStatus(
+                observer.error,
+                Status.Code.UNAUTHENTICATED,
+                "Replica repair control requires an authenticated identity");
+        assertFalse(membershipService.repairsPaused());
+        assertEquals(List.of(repair), membershipService.repairStatuses());
+        assertEquals(
+                ReplicaRepairState.REPLICA_REPAIR_STATE_FAILED, membershipService.replicaRepairState("target-node"));
     }
 
     @Test
@@ -471,6 +552,33 @@ class ClusterServiceImplTest {
 
     private static void asAdmin(Runnable action) {
         GrpcPeerIdentityContext.runAs(GrpcPeerIdentity.admin("coordinator-test"), action);
+    }
+
+    private static ControlReplicaRepairsResponse controlReplicaRepairsAsAdmin(
+            ClusterServiceImpl service, String action) {
+        CapturingObserver<ControlReplicaRepairsResponse> observer = new CapturingObserver<>();
+        asAdmin(() -> service.controlReplicaRepairs(controlRequest(action), observer));
+
+        assertNull(observer.error);
+        assertTrue(observer.completed);
+        assertNotNull(observer.value);
+        return observer.value;
+    }
+
+    private static ControlReplicaRepairsRequest controlRequest(String action) {
+        return ControlReplicaRepairsRequest.newBuilder()
+                .setAction(action)
+                .setRepairId("repair-1")
+                .build();
+    }
+
+    private static ReplicaRepairStatus repairStatus() {
+        return ReplicaRepairStatus.newBuilder()
+                .setRepairId("repair-1")
+                .setTargetNodeId("target-node")
+                .setState(ReplicaRepairState.REPLICA_REPAIR_STATE_FAILED)
+                .setLastError("initial failure")
+                .build();
     }
 
     private static RegisterNodeRequest registerRequest(
