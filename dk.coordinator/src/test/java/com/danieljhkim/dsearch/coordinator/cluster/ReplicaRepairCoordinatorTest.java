@@ -28,6 +28,7 @@ import com.danieljhkim.dsearch.proto.index.WriteReplicaRepairChunkResponse;
 import com.google.protobuf.ByteString;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
+import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -58,6 +59,36 @@ class ReplicaRepairCoordinatorTest {
         assertEquals(
                 ReplicaRepairState.REPLICA_REPAIR_STATE_READY,
                 ReplicaRepairCoordinator.classify(source, manifest(9, 42, "good")));
+    }
+
+    @Test
+    void failedManifestInspectionCannotBootstrapAnEmptyLookingCluster() throws Exception {
+        try (TestCluster cluster = new TestCluster(null, null, new byte[0])) {
+            cluster.source.failManifestInspection = true;
+
+            cluster.coordinator.reconcile();
+
+            assertEquals(
+                    ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKING, cluster.membership.replicaRepairState("source"));
+            assertEquals(
+                    ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKING, cluster.membership.replicaRepairState("target"));
+            assertFalse(cluster.membership.isReplicaEligible("source"));
+            assertFalse(cluster.membership.isReplicaEligible("target"));
+        }
+    }
+
+    @Test
+    void fullyInspectedEmptyClusterCanBootstrapItsNodes() throws Exception {
+        try (TestCluster cluster = new TestCluster(null, null, new byte[0])) {
+            cluster.coordinator.reconcile();
+
+            assertEquals(
+                    ReplicaRepairState.REPLICA_REPAIR_STATE_READY, cluster.membership.replicaRepairState("source"));
+            assertEquals(
+                    ReplicaRepairState.REPLICA_REPAIR_STATE_READY, cluster.membership.replicaRepairState("target"));
+            assertTrue(cluster.membership.isReplicaEligible("source"));
+            assertTrue(cluster.membership.isReplicaEligible("target"));
+        }
     }
 
     @Test
@@ -268,6 +299,7 @@ class ReplicaRepairCoordinatorTest {
         private long maxSnapshotBytes;
         private int beginCalls;
         private int finishCalls;
+        private boolean failManifestInspection;
 
         private RepairService(ReplicaManifest manifest, byte[] snapshot) {
             this.manifest = manifest;
@@ -277,6 +309,12 @@ class ReplicaRepairCoordinatorTest {
         @Override
         public void listReplicaManifests(
                 ListReplicaManifestsRequest request, StreamObserver<ListReplicaManifestsResponse> observer) {
+            if (failManifestInspection) {
+                observer.onError(Status.UNAVAILABLE
+                        .withDescription("manifest inspection unavailable")
+                        .asRuntimeException());
+                return;
+            }
             ListReplicaManifestsResponse.Builder response = ListReplicaManifestsResponse.newBuilder();
             if (manifest != null) {
                 response.addManifests(manifest);
