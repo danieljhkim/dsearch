@@ -102,38 +102,68 @@ public final class ReplicaRepairCoordinator implements AutoCloseable {
         Map<String, Map<String, ReplicaManifest>> manifests = inspectHealthyNodes();
         Map<String, List<NodeManifest>> shards = groupByShard(manifests);
         if (shards.isEmpty()) {
-            // An entirely new cluster has no state to repair.  This bootstrap decision is safe:
-            // the first replicated mutation creates every configured copy before acknowledgement.
-            configuredNodeIds.forEach(
-                    node -> membership.updateReplicaNodeState(node, ReplicaRepairState.REPLICA_REPAIR_STATE_READY));
+            // Only a fully inspected empty cluster is known to be new. An unavailable node may
+            // still hold the only acknowledged copy.
+            configuredNodeIds.forEach(node -> membership.updateReplicaNodeState(
+                    node,
+                    manifests.size() == configuredNodeIds.size()
+                            ? ReplicaRepairState.REPLICA_REPAIR_STATE_READY
+                            : ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKING));
             REMAINING.set(0);
             return;
         }
 
-        Map<String, Boolean> nodeConverged = new HashMap<>();
-        configuredNodeIds.forEach(node -> nodeConverged.put(node, true));
+        Map<String, ReplicaRepairState> nodeStates = new HashMap<>();
+        configuredNodeIds.forEach(node -> nodeStates.put(
+                node,
+                manifests.containsKey(node)
+                        ? ReplicaRepairState.REPLICA_REPAIR_STATE_READY
+                        : ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKING));
         List<RepairCandidate> candidates = new ArrayList<>();
+        int ambiguousCopies = 0;
         for (Map.Entry<String, List<NodeManifest>> entry : shards.entrySet()) {
             ReplicaManifest source = authoritative(entry.getValue());
+            if (source == null) {
+                // A per-document generation maximum is not a shard history. Neither a larger
+                // maximum nor the declared primary proves that it contains the other copy's
+                // acknowledged mutations. Preserve every existing copy for investigation.
+                for (NodeManifest copy : entry.getValue()) {
+                    nodeStates.put(copy.nodeId(), ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKSUM_DIVERGENT);
+                }
+                ambiguousCopies += entry.getValue().size();
+                membership.recordRepairStatus(ReplicaRepairStatus.newBuilder()
+                        .setRepairId("ambiguous-" + entry.getKey())
+                        .setShardId(entry.getKey())
+                        .setState(ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKSUM_DIVERGENT)
+                        .setLastError(
+                                "Replica histories cannot be ordered from their manifests; manual resolution required")
+                        .setUpdatedAtEpochMillis(clock.millis())
+                        .build());
+                continue;
+            }
             String sourceNode = sourceNode(entry.getValue(), source);
             Set<String> expected = expectedNodes(source);
             for (String target : expected) {
+                if (!manifests.containsKey(target)) {
+                    // A failed inspection is not evidence that this replica is missing.
+                    continue;
+                }
                 ReplicaManifest actual =
                         manifests.getOrDefault(target, Map.of()).get(entry.getKey());
                 ReplicaRepairState state = classify(source, actual);
                 if (state != ReplicaRepairState.REPLICA_REPAIR_STATE_READY) {
-                    nodeConverged.put(target, false);
+                    nodeStates.computeIfPresent(
+                            target,
+                            (ignored, current) -> current == ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKSUM_DIVERGENT
+                                    ? current
+                                    : ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKING);
                     candidates.add(new RepairCandidate(entry.getKey(), sourceNode, target, source, state));
                 }
             }
         }
-        REMAINING.set(candidates.size());
-        for (Map.Entry<String, Boolean> entry : nodeConverged.entrySet()) {
-            membership.updateReplicaNodeState(
-                    entry.getKey(),
-                    entry.getValue()
-                            ? ReplicaRepairState.REPLICA_REPAIR_STATE_READY
-                            : ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKING);
+        REMAINING.set(candidates.size() + ambiguousCopies);
+        for (Map.Entry<String, ReplicaRepairState> entry : nodeStates.entrySet()) {
+            membership.updateReplicaNodeState(entry.getKey(), entry.getValue());
         }
 
         int admitted = Math.max(1, config.getMaxConcurrentRepairs());
@@ -177,18 +207,17 @@ public final class ReplicaRepairCoordinator implements AutoCloseable {
     }
 
     private ReplicaManifest authoritative(List<NodeManifest> candidates) {
-        long highestPosition = candidates.stream()
-                .mapToLong(candidate -> candidate.manifest().getCommittedPosition())
-                .max()
-                .orElse(0L);
-        long highestGeneration = candidates.stream()
-                .filter(candidate -> candidate.manifest().getCommittedPosition() == highestPosition)
-                .mapToLong(candidate -> candidate.manifest().getPlacementGeneration())
-                .max()
-                .orElse(0L);
+        // Only identical observed histories can supply a missing copy. No manifest field
+        // proves an ordering between distinct existing histories.
+        ReplicaManifest first = candidates.getFirst().manifest();
+        if (candidates.stream()
+                .anyMatch(candidate -> !equivalent(first, candidate.manifest())
+                        || !first.getLogicalPartitionId()
+                                .equals(candidate.manifest().getLogicalPartitionId())
+                        || !first.getPrimaryNodeId().equals(candidate.manifest().getPrimaryNodeId()))) {
+            return null;
+        }
         return candidates.stream()
-                .filter(candidate -> candidate.manifest().getCommittedPosition() == highestPosition)
-                .filter(candidate -> candidate.manifest().getPlacementGeneration() == highestGeneration)
                 .sorted(Comparator.comparing((NodeManifest candidate) ->
                                 !candidate.nodeId().equals(candidate.manifest().getPrimaryNodeId()))
                         .thenComparing(NodeManifest::nodeId))
