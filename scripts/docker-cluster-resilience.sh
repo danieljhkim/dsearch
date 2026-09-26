@@ -124,6 +124,9 @@ max_concurrent_http=$(config_value maxConcurrentHttpRequests)
 max_concurrent_fanout=$(config_value maxConcurrentFanoutCalls)
 node_expiry_seconds=$(config_value nodeExpirySeconds)
 health_refresh_seconds=$(config_value refreshIntervalSeconds)
+control_plane_restart_target_seconds=${DSEARCH_CONTROL_PLANE_RESTART_TARGET_SECONDS:-240}
+[[ "$control_plane_restart_target_seconds" =~ ^[0-9]+$ && "$control_plane_restart_target_seconds" -gt 0 ]] \
+  || fail "DSEARCH_CONTROL_PLANE_RESTART_TARGET_SECONDS must be a positive integer"
 
 # One request may sit in the gateway for its whole budget plus TLS setup and
 # JVM scheduling noise. Anything past this bound is treated as a hang.
@@ -253,19 +256,21 @@ write_reports() {
     --argjson maxConcurrentHttpRequests "$max_concurrent_http" \
     --argjson maxConcurrentFanoutCalls "$max_concurrent_fanout" \
     --argjson nodeExpirySeconds "$node_expiry_seconds" \
+    --argjson controlPlaneRestartTargetSeconds "$control_plane_restart_target_seconds" \
     '{schemaVersion:1, project:$project, completedAt:$completedAt,
       budget:{requestTimeoutMillis:$requestTimeoutMillis,
               maxConcurrentHttpRequests:$maxConcurrentHttpRequests,
               maxConcurrentFanoutCalls:$maxConcurrentFanoutCalls,
               nodeExpirySeconds:$nodeExpirySeconds},
+      objective:{controlPlaneRestartTargetSeconds:$controlPlaneRestartTargetSeconds},
       scenarios:.}' \
     "$scenario_records" >"$report_file" 2>/dev/null || return 0
 
   {
     printf '# Docker cluster resilience gate\n\n'
     printf -- '- Compose project: `%s`\n' "$project_name"
-    printf -- '- Request budget: %s ms; HTTP admission: %s; fan-out admission: %s; membership lease: %ss\n\n' \
-      "$request_timeout_millis" "$max_concurrent_http" "$max_concurrent_fanout" "$node_expiry_seconds"
+    printf -- '- Request budget: %s ms; HTTP admission: %s; fan-out admission: %s; membership lease: %ss; coordinator recovery target: %ss\n\n' \
+      "$request_timeout_millis" "$max_concurrent_http" "$max_concurrent_fanout" "$node_expiry_seconds" "$control_plane_restart_target_seconds"
     printf '| Scenario | Fault injected | Fault removed | Recovery (s) | Duration (s) | Assertions |\n'
     printf '| --- | --- | --- | --- | --- | --- |\n'
     jq -r '.scenarios[]
@@ -917,8 +922,13 @@ pass "the gateway reported the missing coordinator instead of failing open"
 
 "${compose[@]}" start coordinator
 fault_removed "coordinator restarted from its persisted state volume"
+coordinator_recovery_started=$SECONDS
 await_node_ready "$coordinator_health_url" 180
 await_full_capacity 240
+coordinator_recovery_seconds=$((SECONDS - coordinator_recovery_started))
+((coordinator_recovery_seconds <= control_plane_restart_target_seconds)) \
+  || fail "coordinator restart took ${coordinator_recovery_seconds}s, exceeding the ${control_plane_restart_target_seconds}s control-plane target"
+pass "coordinator recovered from durable state in ${coordinator_recovery_seconds}s, within the ${control_plane_restart_target_seconds}s control-plane target"
 assert_topology_continuity "after coordinator restart"
 verify_dataset "after coordinator restart"
 end_scenario

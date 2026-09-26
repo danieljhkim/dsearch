@@ -174,3 +174,18 @@ boundary. Recovery time is measured from empty-project creation through epoch/to
 exact document-count validation, and public BM25/vector/hybrid verification. Retain all three evidence
 files with the backup under test; together they record the commit, dataset, artifact, checksums, and
 measurements needed to reproduce or audit the drill.
+
+## Coordinator loss evaluation boundary
+
+For the current single-coordinator engineering target, this restore is the recovery path for a lost
+coordinator machine or durable disk. The target allows one trained operator to restore into an empty
+deployment with RPO at most 300 seconds and RTO at most 900 seconds. `docker-cluster-e2e.sh` enforces
+those limits against the measured report (override them only to make the test stricter with
+`DSEARCH_RECOVERY_RPO_TARGET_SECONDS` and `DSEARCH_RECOVERY_RTO_TARGET_SECONDS`). A process-only
+coordinator failure takes the faster durable-volume restart path in
+[`OPERABILITY.md`](./OPERABILITY.md), which has a 240-second no-operator target.
+
+Do not infer a second leader from a backup restore. Restore creates one fresh, fenced deployment and
+verifies its preserved epoch and non-regressing topology; it does not permit two coordinators to
+write the same topology. A future HA design must retain this single-writer property with a durable
+fencing token and a tested upgrade/rollback path before it can replace this runbook.

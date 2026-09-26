@@ -113,6 +113,54 @@ The repository does not run this Docker exercise in GitHub Actions. Run it manua
 operability evidence is needed. Runtime is roughly 25 minutes on a two-core machine after image
 build and cluster startup.
 
+## Coordinator availability decision
+
+This is an engineering evaluation target for the Docker Compose control plane, not an externally
+promised SLA. It deliberately distinguishes serving a last accepted topology from accepting a new
+authoritative topology.
+
+| Failure scope | Allowed control-plane/data-plane effect | Recovery objective | Recovery point | Operator intervention | Drill evidence |
+| --- | --- | --- | --- | --- | --- |
+| Coordinator process or container loss with its `/data` volume intact | New membership and topology changes pause; reads continue only from a previously accepted topology and remain bounded and explicit | Coordinator and full fan-out capacity return within 240 seconds | No loss of the durable coordinator epoch or topology | None | `coordinator-restart` stops and starts the coordinator, checks a bounded search during loss, then checks epoch, non-regressing version, full fan-out, and the 240-second target. |
+| Coordinator network partition from data-plane nodes | The same bounded-staleness reads may continue only for `serviceDiscovery.maxStalenessSeconds`; after that, discovery fails closed. No replacement coordinator is elected. | Connectivity restoration and coordinator rejoin within 240 seconds after the partition is removed | No new authoritative topology is accepted while isolated | None to heal a transient partition | The restart drill exercises the same unavailable-coordinator client path. A partition injector is not yet present, so a partition is explicitly not evidence for automatic failover. |
+| Coordinator machine or durable-disk loss | Control-plane mutation is unavailable; data-plane requests remain bounded but are not an availability guarantee after their accepted topology becomes stale | One trained operator restores a verified backup into an empty deployment and completes public verification within 900 seconds | At most 300 seconds from the last durably acknowledged write to the recovery boundary | One operator performs the documented restore; no hand editing of state | `docker-cluster-e2e.sh` produces `recovery-report.json` and fails when its measured RPO or RTO exceeds the stated target. The empty-project restore is the machine/disk-loss recovery exercise. |
+
+The target includes process, machine, durable-disk, and network-partition failures. It does not
+claim transparent control-plane failover for the latter three: the target accepts bounded stale
+data-plane service and a documented restore where necessary. A run must retain the generated
+`resilience-report.json`, `recovery-report.json`, and `recovery-drill-record.md`; prose alone is
+not evidence that the target was met.
+
+### Current decision: retain one coordinator
+
+The hardened single-coordinator design meets this target when both scripts pass with their default
+thresholds (or stricter operator-supplied thresholds). Therefore **no coordinator-HA implementation
+is required for this target**. This is not a claim of automatic machine-loss or partition failover.
+If a drill exceeds a threshold, or an owner requires uninterrupted authoritative control-plane
+writes during coordinator host/disk loss or partition, file one bounded coordinator-HA task before
+selecting a consensus system. Its acceptance criteria must require a fault-injected active-leader
+loss and partition test, a durable failover RPO/RTO report, fenced single-writer proof, and an
+upgrade/rollback rehearsal.
+
+### State and future HA boundary
+
+The coordinator's minimal authoritative state is the durable topology epoch and monotonically
+increasing version, member identities/endpoints/roles/health and lease timestamps, plus replica
+placement and repair-control state. It is atomically written with a backup copy. Lucene shard data,
+model caches, and the recovery manifest are data-plane/backup state rather than leader-election
+state. A future HA design must replicate this state with linearizable single-writer semantics before
+acknowledging membership, placement, repair-control, or topology changes.
+
+Existing fencing is version and epoch based: clients reject a changed epoch or regressing topology
+version, data-plane discovery fails closed once bounded staleness expires, and lost shard owners do
+not have writes silently rerouted. This prevents a stale coordinator view from becoming an
+unacknowledged writer, but it is not leader fencing across two coordinators. Any HA implementation
+must add a durable fencing token checked by every mutating participant, reject stale leaders before
+they serve writes, and preserve the current epoch/version compatibility contract during a rolling
+upgrade. The deployment owner must operate quorum membership, backup/restore of consensus state,
+certificate rotation, alerting, and a version-skew/rollback procedure; that permanent operational
+cost is not justified by the target above.
+
 When the exercise fails, start with `resilience-report.md` to find the scenario, then
 `fault-timeline.jsonl` for the exact injection time, then the matching
 `<scenario>-after-services.log` and `metrics/<scenario>-during.prom`.

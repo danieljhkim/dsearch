@@ -14,6 +14,11 @@ compose_started=false
 prebuilt_images=false
 recovery_restore_project=
 recovery_interrupted_project=
+recovery_rpo_target_seconds=${DSEARCH_RECOVERY_RPO_TARGET_SECONDS:-300}
+recovery_rto_target_seconds=${DSEARCH_RECOVERY_RTO_TARGET_SECONDS:-900}
+
+[[ "$recovery_rpo_target_seconds" =~ ^[0-9]+$ && "$recovery_rto_target_seconds" =~ ^[0-9]+$ ]] \
+  || { echo 'DSEARCH_RECOVERY_RPO_TARGET_SECONDS and DSEARCH_RECOVERY_RTO_TARGET_SECONDS must be non-negative integers' >&2; exit 2; }
 
 DSEARCH_LOG_TAG=docker-e2e
 source "$repo_root/scripts/lib/docker-cluster.sh"
@@ -305,6 +310,12 @@ jq -e --arg artifact "$artifact_id" \
     and .datasetId == "docker-e2e-recovery-v1"
     and .recoveryPointSeconds >= 0 and .recoveryTimeSeconds >= 0' \
   "$recovery_report" >/dev/null || fail 'restore report is incomplete'
+recovery_point_seconds=$(jq -r '.recoveryPointSeconds' "$recovery_report")
+recovery_time_seconds=$(jq -r '.recoveryTimeSeconds' "$recovery_report")
+((recovery_point_seconds <= recovery_rpo_target_seconds)) \
+  || fail "recovery drill RPO ${recovery_point_seconds}s exceeds the ${recovery_rpo_target_seconds}s target"
+((recovery_time_seconds <= recovery_rto_target_seconds)) \
+  || fail "recovery drill RTO ${recovery_time_seconds}s exceeds the ${recovery_rto_target_seconds}s target"
 log "Recovery drill passed: artifact=$artifact_id RPO=$(jq -r '.recoveryPointSeconds' "$recovery_report")s RTO=$(jq -r '.recoveryTimeSeconds' "$recovery_report")s"
 mkdir -p "$diagnostics_dir"
 cp "$snapshot_dir/manifest.json" "$diagnostics_dir/recovery-manifest.json"
@@ -316,7 +327,11 @@ jq -r '
   + "- Artifact: `" + .artifactId + "`\n"
   + "- Recovery point: " + (.recoveryPointSeconds | tostring) + " seconds after the last acknowledged write\n"
   + "- Recovery time: " + (.recoveryTimeSeconds | tostring) + " seconds from empty project creation through public verification\n"
+  + "- Evaluated RPO target: " + $rpoTarget + " seconds\n"
+  + "- Evaluated RTO target: " + $rtoTarget + " seconds\n"
   + "- Completed: `" + .completedAt + "`\n"' \
+  --arg rpoTarget "$recovery_rpo_target_seconds" \
+  --arg rtoTarget "$recovery_rto_target_seconds" \
   "$recovery_report" >"$diagnostics_dir/recovery-drill-record.md"
 
 docker compose --project-name "$recovery_restore_project" --file "$compose_file" \
