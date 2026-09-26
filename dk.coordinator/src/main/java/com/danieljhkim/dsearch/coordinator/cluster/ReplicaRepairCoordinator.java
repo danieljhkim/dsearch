@@ -142,6 +142,16 @@ public final class ReplicaRepairCoordinator implements AutoCloseable {
                 continue;
             }
             String sourceNode = sourceNode(entry.getValue(), source);
+            if (sourceNode == null) {
+                for (NodeManifest copy : entry.getValue()) {
+                    nodeStates.put(copy.nodeId(), ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKING);
+                }
+                for (String target : expectedNodes(source)) {
+                    nodeStates.computeIfPresent(
+                            target, (ignored, current) -> ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKING);
+                }
+                continue;
+            }
             Set<String> expected = expectedNodes(source);
             for (String target : expected) {
                 if (!manifests.containsKey(target)) {
@@ -219,6 +229,8 @@ public final class ReplicaRepairCoordinator implements AutoCloseable {
         }
         return candidates.stream()
                 .sorted(Comparator.comparing((NodeManifest candidate) ->
+                                !"ready".equals(candidate.manifest().getState()))
+                        .thenComparing(candidate ->
                                 !candidate.nodeId().equals(candidate.manifest().getPrimaryNodeId()))
                         .thenComparing(NodeManifest::nodeId))
                 .findFirst()
@@ -228,13 +240,14 @@ public final class ReplicaRepairCoordinator implements AutoCloseable {
 
     private String sourceNode(List<NodeManifest> candidates, ReplicaManifest source) {
         return candidates.stream()
-                .filter(candidate -> equivalent(source, candidate.manifest()))
+                .filter(candidate -> equivalent(source, candidate.manifest())
+                        && "ready".equals(candidate.manifest().getState()))
                 .sorted(Comparator.comparing(
                                 (NodeManifest candidate) -> !candidate.nodeId().equals(source.getPrimaryNodeId()))
                         .thenComparing(NodeManifest::nodeId))
                 .findFirst()
-                .orElseThrow()
-                .nodeId();
+                .map(NodeManifest::nodeId)
+                .orElse(null);
     }
 
     private Set<String> expectedNodes(ReplicaManifest manifest) {
@@ -264,6 +277,9 @@ public final class ReplicaRepairCoordinator implements AutoCloseable {
         }
         if (!target.getContentChecksum().equals(source.getContentChecksum())) {
             return ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKSUM_DIVERGENT;
+        }
+        if (!"ready".equals(target.getState())) {
+            return ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKING;
         }
         return ReplicaRepairState.REPLICA_REPAIR_STATE_READY;
     }
@@ -345,7 +361,8 @@ public final class ReplicaRepairCoordinator implements AutoCloseable {
                     .finishReplicaRepair(FinishReplicaRepairRequest.newBuilder()
                             .setRepairId(repairId)
                             .build());
-            if (!equivalent(snapshot.getManifest(), finished.getManifest())) {
+            if (!equivalent(snapshot.getManifest(), finished.getManifest())
+                    || !"ready".equals(finished.getManifest().getState())) {
                 throw new IllegalStateException("target post-install manifest did not converge");
             }
             status.setState(ReplicaRepairState.REPLICA_REPAIR_STATE_READY).setUpdatedAtEpochMillis(clock.millis());

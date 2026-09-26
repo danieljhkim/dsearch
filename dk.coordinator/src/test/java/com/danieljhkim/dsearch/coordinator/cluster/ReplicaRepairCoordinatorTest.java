@@ -59,6 +59,13 @@ class ReplicaRepairCoordinatorTest {
         assertEquals(
                 ReplicaRepairState.REPLICA_REPAIR_STATE_READY,
                 ReplicaRepairCoordinator.classify(source, manifest(9, 42, "good")));
+        assertEquals(
+                ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKING,
+                ReplicaRepairCoordinator.classify(
+                        source,
+                        manifest(9, 42, "good").toBuilder()
+                                .setState("repairing")
+                                .build()));
     }
 
     @Test
@@ -154,6 +161,48 @@ class ReplicaRepairCoordinatorTest {
     }
 
     @Test
+    void matchingFailedTargetStaysFencedAcrossReconcileAndCoordinatorRestart() throws Exception {
+        byte[] snapshot = "matching-snapshot".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        ReplicaManifest matching = manifest(9, 42, "good");
+        try (TestCluster cluster = new TestCluster(matching, matching, snapshot)) {
+            cluster.target.manifest = matching.toBuilder().setState("repairing").build();
+            cluster.target.finishOverride = manifest(9, 42, "wrong");
+
+            cluster.coordinator.reconcile();
+            assertFalse(cluster.membership.isReplicaEligible("target"));
+            assertEquals(
+                    ReplicaRepairState.REPLICA_REPAIR_STATE_FAILED,
+                    onlyRepair(cluster.membership).getState());
+
+            cluster.restartCoordinator();
+            cluster.coordinator.reconcile();
+            assertFalse(cluster.membership.isReplicaEligible("target"));
+            assertEquals(2, cluster.target.finishCalls);
+            assertEquals("repairing", cluster.target.manifest.getState());
+
+            cluster.target.finishOverride = null;
+            cluster.coordinator.reconcile();
+            assertFalse(cluster.membership.isReplicaEligible("target"));
+            cluster.coordinator.reconcile();
+            assertTrue(cluster.membership.isReplicaEligible("target"));
+        }
+    }
+
+    @Test
+    void matchingFencedCopiesCannotSupplyOrAdmitEachOther() throws Exception {
+        ReplicaManifest fenced =
+                manifest(9, 42, "good").toBuilder().setState("repairing").build();
+        try (TestCluster cluster = new TestCluster(fenced, fenced, "snapshot".getBytes())) {
+            cluster.coordinator.reconcile();
+
+            assertFalse(cluster.membership.isReplicaEligible("source"));
+            assertFalse(cluster.membership.isReplicaEligible("target"));
+            assertEquals(0, cluster.source.beginCalls);
+            assertEquals(0, cluster.target.beginCalls);
+        }
+    }
+
+    @Test
     void equalPerDocumentMaximumCannotOverwriteTheOnlyCompleteCopy() throws Exception {
         ReplicaManifest incompletePrimary =
                 manifest(9, 1, "document-A").toBuilder().setDocumentCount(1).build();
@@ -215,6 +264,7 @@ class ReplicaRepairCoordinatorTest {
                 .setPlacementGeneration(generation)
                 .setCommittedPosition(position)
                 .setContentChecksum(checksum)
+                .setState("ready")
                 .build();
     }
 
@@ -265,7 +315,8 @@ class ReplicaRepairCoordinatorTest {
         private final RunningNode sourceNode;
         private final RunningNode targetNode;
         private final ClusterMembershipService membership;
-        private final ReplicaRepairCoordinator coordinator;
+        private ReplicaRepairCoordinator coordinator;
+        private final AppConfig config;
 
         private TestCluster(ReplicaManifest sourceManifest, ReplicaManifest targetManifest, byte[] snapshot)
                 throws IOException {
@@ -273,10 +324,15 @@ class ReplicaRepairCoordinatorTest {
             target = new RepairService(targetManifest, new byte[0]);
             sourceNode = RunningNode.start(source);
             targetNode = RunningNode.start(target);
-            AppConfig config = config(sourceNode.port(), targetNode.port());
+            config = config(sourceNode.port(), targetNode.port());
             membership = new ClusterMembershipService(config);
             membership.registerNode(member("source", sourceNode.port()), NodeRole.NODE_ROLE_INDEX);
             membership.registerNode(member("target", targetNode.port()), NodeRole.NODE_ROLE_INDEX);
+            coordinator = new ReplicaRepairCoordinator(membership, config, CLOCK);
+        }
+
+        private void restartCoordinator() {
+            coordinator.close();
             coordinator = new ReplicaRepairCoordinator(membership, config, CLOCK);
         }
 
@@ -379,7 +435,10 @@ class ReplicaRepairCoordinatorTest {
             finishCalls++;
             ReplicaManifest finished = finishOverride == null ? acceptedManifest : finishOverride;
             if (finishOverride == null) {
-                manifest = acceptedManifest;
+                manifest = acceptedManifest.toBuilder().setState("ready").build();
+                finished = manifest;
+            } else {
+                manifest = acceptedManifest.toBuilder().setState("repairing").build();
             }
             observer.onNext(FinishReplicaRepairResponse.newBuilder()
                     .setManifest(finished)

@@ -3,12 +3,22 @@ package com.danieljhkim.dsearch.indexnode.index;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.danieljhkim.dsearch.common.model.SearchDocument;
 import com.danieljhkim.dsearch.proto.common.SearchType;
+import java.io.IOException;
 import java.nio.file.Path;
+import java.security.MessageDigest;
 import java.time.Duration;
+import java.util.HexFormat;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -93,6 +103,101 @@ class ReplicaRepairStoreTest {
                     restarted
                             .searchDocument("tenant_r1", "first OR second", 10, 0, SearchType.BM25)
                             .getTotalHits());
+            assertEquals("ready", repaired.state());
+            apply(restarted, "doc-3", "resumed", 3);
+            assertEquals(
+                    1,
+                    restarted
+                            .searchDocument("tenant_r1", "resumed", 10, 0, SearchType.BM25)
+                            .getTotalHits());
+        }
+    }
+
+    @Test
+    void sourceWriteBetweenManifestAndPayloadWaitsForTheSnapshotBoundary() throws Exception {
+        try (IndexManager source = manager(tempDir.resolve("source-boundary"));
+                IndexManager target = manager(tempDir.resolve("target-boundary"));
+                var writer = Executors.newSingleThreadExecutor()) {
+            apply(source, "doc-1", "before", 1);
+            CountDownLatch started = new CountDownLatch(1);
+            AtomicReference<Future<Void>> write = new AtomicReference<>();
+            IndexManager.ReplicaSnapshotData captured =
+                    source.captureReplicaSnapshot("tenant_r1", 32 * 1024 * 1024, () -> {
+                        write.set(writer.submit(() -> {
+                            started.countDown();
+                            apply(source, "doc-2", "after", 2);
+                            return null;
+                        }));
+                        try {
+                            assertTrue(started.await(5, TimeUnit.SECONDS));
+                            assertThrows(
+                                    TimeoutException.class, () -> write.get().get(200, TimeUnit.MILLISECONDS));
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            throw new AssertionError(e);
+                        }
+                    });
+            write.get().get(5, TimeUnit.SECONDS);
+
+            String checksum = HexFormat.of()
+                    .formatHex(MessageDigest.getInstance("SHA-256").digest(captured.payload()));
+            ReplicaRepairStore.SourceSnapshot snapshot = new ReplicaRepairStore.SourceSnapshot(
+                    "boundary-snapshot", captured.payload(), checksum, captured.manifest());
+            install(new ReplicaRepairStore(target), "repair-boundary", snapshot);
+            assertEquals(
+                    captured.manifest().contentChecksum(),
+                    target.replicaManifest("tenant_r1").contentChecksum());
+            assertEquals(1, target.replicaManifest("tenant_r1").committedPosition());
+            assertEquals(2, source.replicaManifest("tenant_r1").committedPosition());
+        }
+    }
+
+    @Test
+    void failedInstallWithMatchingBytesRestoresTheWriteFenceAfterRestart() throws Exception {
+        Path targetPath = tempDir.resolve("target-failed-install");
+        ReplicaRepairStore.SourceSnapshot current;
+        try (IndexManager source = manager(tempDir.resolve("source-failed-install"));
+                IndexManager target = manager(targetPath)) {
+            apply(source, "doc-1", "first", 1);
+            IndexManager.ReplicaManifestData stale = source.replicaManifest("tenant_r1");
+            apply(source, "doc-2", "second", 2);
+            current = new ReplicaRepairStore(source).openSnapshot("tenant_r1", 32 * 1024 * 1024);
+            ReplicaRepairStore targetStore = new ReplicaRepairStore(target);
+            long offset = targetStore.begin(
+                    "repair-stale-manifest",
+                    current.snapshotId(),
+                    current.payload().length,
+                    current.transferChecksum(),
+                    stale);
+            targetStore.write("repair-stale-manifest", offset, current.payload());
+            assertThrows(IOException.class, () -> targetStore.finish("repair-stale-manifest"));
+            assertEquals(
+                    current.manifest().contentChecksum(),
+                    target.replicaManifest("tenant_r1").contentChecksum());
+            assertEquals("repairing", target.replicaManifest("tenant_r1").state());
+            assertThrows(IndexManager.RepairInProgressException.class, () -> apply(target, "doc-3", "blocked", 3));
+        }
+
+        try (IndexManager restarted = manager(targetPath)) {
+            ReplicaRepairStore resumed = new ReplicaRepairStore(restarted);
+            assertEquals(
+                    current.manifest().contentChecksum(),
+                    restarted.replicaManifest("tenant_r1").contentChecksum());
+            assertEquals("repairing", restarted.replicaManifest("tenant_r1").state());
+            assertThrows(IndexManager.RepairInProgressException.class, () -> apply(restarted, "doc-3", "blocked", 3));
+            install(resumed, "repair-current-manifest", current);
+            assertEquals("ready", restarted.replicaManifest("tenant_r1").state());
+            apply(restarted, "doc-3", "resumed", 3);
+            assertEquals(
+                    1,
+                    restarted
+                            .searchDocument("tenant_r1", "resumed", 10, 0, SearchType.BM25)
+                            .getTotalHits());
+        }
+        try (IndexManager restartedAgain = manager(targetPath)) {
+            new ReplicaRepairStore(restartedAgain);
+            assertEquals("ready", restartedAgain.replicaManifest("tenant_r1").state());
+            apply(restartedAgain, "doc-4", "still-resumed", 4);
         }
     }
 

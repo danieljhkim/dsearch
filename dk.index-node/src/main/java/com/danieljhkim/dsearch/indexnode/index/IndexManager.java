@@ -1029,6 +1029,25 @@ public class IndexManager implements Closeable {
         }
     }
 
+    public ReplicaSnapshotData captureReplicaSnapshot(String shardId, long maxBytes) throws IOException {
+        return captureReplicaSnapshot(shardId, maxBytes, () -> {});
+    }
+
+    ReplicaSnapshotData captureReplicaSnapshot(String shardId, long maxBytes, Runnable afterManifest)
+            throws IOException {
+        PartitionIdValidator.validate(shardId);
+        ShardBuffer buffer = getBuffer(shardId);
+        buffer.lock.lock();
+        try {
+            ReplicaManifestData manifest = replicaManifest(shardId);
+            afterManifest.run();
+            byte[] payload = createReplicaSnapshot(shardId, maxBytes);
+            return new ReplicaSnapshotData(manifest, payload);
+        } finally {
+            buffer.lock.unlock();
+        }
+    }
+
     public void markReplicaRepairing(String shardId) {
         PartitionIdValidator.validate(shardId);
         repairingShards.add(shardId);
@@ -1760,6 +1779,8 @@ public class IndexManager implements Closeable {
             long documentCount,
             String state,
             String lastError) {}
+
+    public record ReplicaSnapshotData(ReplicaManifestData manifest, byte[] payload) {}
 
     private record ReplicaIdentity(String logicalPartitionId, String primaryNodeId) {
         private ReplicaIdentity {
