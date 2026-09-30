@@ -53,7 +53,7 @@
         <!-- Testing -->
         <mockito.version>5.23.0</mockito.version>
         <!-- Serialization / config -->
-        <jackson.version>2.21.5</jackson.version>
+        <jackson.version>2.22.1</jackson.version>
         <snakeyaml.version>2.4</snakeyaml.version>
         <!-- ML -->
         <djl.version>0.37.0</djl.version>
