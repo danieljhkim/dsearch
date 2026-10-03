@@ -5,7 +5,7 @@ COPY . .
 RUN --mount=type=cache,target=/root/.m2 mvn -B -ntp clean package -pl dk.query-node -am
 
 # Multi-architecture index digest for eclipse-temurin:21-jre-jammy.
-FROM eclipse-temurin:21-jre-jammy@sha256:eebd356ad7358b7094758e5787a6726f332917cfd56feab6457c56dab895cdbf
+FROM eclipse-temurin:21-jre-jammy@sha256:bce52ea7da1f72e6bf5bec505e63b6eb55ba79ad1226903579f77eab1a80139a
 RUN groupadd --gid 10001 dsearch \
     && useradd --uid 10001 --gid 10001 --home-dir /nonexistent --shell /usr/sbin/nologin dsearch \
     && install --directory --owner=10001 --group=10001 /var/cache/dsearch
