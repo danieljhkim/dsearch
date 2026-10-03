@@ -65,7 +65,6 @@ template:
   - code-review-sweep
   - no-diff-expected
   priority: medium
-  crew: sol
   status: backlog
 dedupe: skip_if_open
 created_by: system
