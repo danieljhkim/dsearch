@@ -51,7 +51,7 @@
         <micrometer.registry.prometheus.version>1.15.11</micrometer.registry.prometheus.version>
         <prometheus.simpleclient.version>0.16.0</prometheus.simpleclient.version>
         <!-- Testing -->
-        <mockito.version>5.23.0</mockito.version>
+        <mockito.version>5.24.0</mockito.version>
         <!-- Serialization / config -->
         <jackson.version>2.21.7</jackson.version>
         <snakeyaml.version>2.4</snakeyaml.version>
