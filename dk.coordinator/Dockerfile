@@ -1,5 +1,5 @@
 # Multi-architecture index digest for maven:3.9.11-eclipse-temurin-21.
-FROM --platform=$BUILDPLATFORM maven:3.9.11-eclipse-temurin-21@sha256:6fdc855a6ed81d288ca7ca37ac6ff5e9308b612485c0801d70b25a858c83d237 AS build
+FROM --platform=$BUILDPLATFORM maven:3-eclipse-temurin-26@sha256:5bfb178bea156ab53b779b2be338e8bfb45decfed35d83da92f1dd9b7348845c AS build
 WORKDIR /app
 COPY . .
 RUN --mount=type=cache,target=/root/.m2 mvn -B -ntp clean package -pl dk.coordinator -am
