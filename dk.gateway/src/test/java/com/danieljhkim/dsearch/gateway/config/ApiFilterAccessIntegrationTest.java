@@ -151,9 +151,7 @@ class ApiFilterAccessIntegrationTest {
             probe.release.countDown();
             assertThat(first.get(5, TimeUnit.SECONDS).statusCode()).isEqualTo(200);
         }
-        assertThat(send(request("/api/v1/echo").POST(HttpRequest.BodyPublishers.ofString("small")), null)
-                        .statusCode())
-                .isEqualTo(200);
+        assertThat(awaitAdmission().statusCode()).isEqualTo(200);
     }
 
     @Test
@@ -164,6 +162,23 @@ class ApiFilterAccessIntegrationTest {
     private HttpRequest.Builder request(String path) {
         return HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + path))
                 .timeout(Duration.ofSeconds(10));
+    }
+
+    /**
+     * The client can see the held response before the admission filter's finally block returns its
+     * permit, so poll until an API request is admitted again.
+     */
+    private HttpResponse<String> awaitAdmission() throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        HttpResponse<String> response;
+        do {
+            response = send(request("/api/v1/echo").POST(HttpRequest.BodyPublishers.ofString("small")), null);
+            if (response.statusCode() != 429) {
+                return response;
+            }
+            Thread.sleep(10);
+        } while (System.nanoTime() < deadline);
+        return response;
     }
 
     private HttpResponse<String> send(HttpRequest.Builder request, String token) throws Exception {
