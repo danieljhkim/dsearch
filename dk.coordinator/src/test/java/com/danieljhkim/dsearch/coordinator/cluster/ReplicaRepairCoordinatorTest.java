@@ -36,7 +36,9 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
@@ -251,14 +253,51 @@ class ReplicaRepairCoordinatorTest {
         }
     }
 
+    @Test
+    void checksumDivergentStateStaysStickyForBothShardIterationOrders() throws Exception {
+        assertDivergentStateForShardOrder("a", "b", true);
+        assertDivergentStateForShardOrder("b", "a", false);
+    }
+
+    private static void assertDivergentStateForShardOrder(
+            String ambiguousShard, String noReadySourceShard, boolean ambiguousShardFirst) throws Exception {
+        Map<String, Boolean> shardOrder = new HashMap<>();
+        shardOrder.put(ambiguousShard, true);
+        shardOrder.put(noReadySourceShard, false);
+        assertEquals(
+                ambiguousShardFirst
+                        ? List.of(ambiguousShard, noReadySourceShard)
+                        : List.of(noReadySourceShard, ambiguousShard),
+                new ArrayList<>(shardOrder.keySet()));
+
+        ReplicaManifest sourceAmbiguous = manifest(ambiguousShard, 9, 2, "source-history");
+        ReplicaManifest targetAmbiguous = manifest(ambiguousShard, 9, 1, "target-history");
+        try (TestCluster cluster = new TestCluster(sourceAmbiguous, targetAmbiguous, new byte[0])) {
+            cluster.source.additionalManifests.add(manifest(noReadySourceShard, 9, 2, "fenced-history").toBuilder()
+                    .setState("repairing")
+                    .build());
+
+            cluster.coordinator.reconcile();
+
+            assertEquals(
+                    ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKSUM_DIVERGENT,
+                    cluster.membership.replicaRepairState("source"));
+            assertFalse(cluster.membership.isReplicaEligible("source"));
+        }
+    }
+
     private static ReplicaRepairStatus onlyRepair(ClusterMembershipService membership) {
         assertEquals(1, membership.repairStatuses().size());
         return membership.repairStatuses().getFirst();
     }
 
     private static ReplicaManifest manifest(long generation, long position, String checksum) {
+        return manifest("tenant_r1", generation, position, checksum);
+    }
+
+    private static ReplicaManifest manifest(String shardId, long generation, long position, String checksum) {
         return ReplicaManifest.newBuilder()
-                .setShardId("tenant_r1")
+                .setShardId(shardId)
                 .setLogicalPartitionId("tenant")
                 .setPrimaryNodeId("source")
                 .setPlacementGeneration(generation)
@@ -346,6 +385,7 @@ class ReplicaRepairCoordinatorTest {
 
     private static final class RepairService extends IndexServiceGrpc.IndexServiceImplBase {
         private ReplicaManifest manifest;
+        private final List<ReplicaManifest> additionalManifests = new ArrayList<>();
         private byte[] snapshot;
         private ReplicaManifest acceptedManifest;
         private ReplicaManifest finishOverride;
@@ -375,6 +415,7 @@ class ReplicaRepairCoordinatorTest {
             if (manifest != null) {
                 response.addManifests(manifest);
             }
+            response.addAllManifests(additionalManifests);
             observer.onNext(response.build());
             observer.onCompleted();
         }

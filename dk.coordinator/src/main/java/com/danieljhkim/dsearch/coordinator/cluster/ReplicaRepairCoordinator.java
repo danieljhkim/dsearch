@@ -114,7 +114,8 @@ public final class ReplicaRepairCoordinator implements AutoCloseable {
         }
 
         Map<String, ReplicaRepairState> nodeStates = new HashMap<>();
-        configuredNodeIds.forEach(node -> nodeStates.put(
+        configuredNodeIds.forEach(node -> mergeNodeState(
+                nodeStates,
                 node,
                 manifests.containsKey(node)
                         ? ReplicaRepairState.REPLICA_REPAIR_STATE_READY
@@ -128,7 +129,8 @@ public final class ReplicaRepairCoordinator implements AutoCloseable {
                 // maximum nor the declared primary proves that it contains the other copy's
                 // acknowledged mutations. Preserve every existing copy for investigation.
                 for (NodeManifest copy : entry.getValue()) {
-                    nodeStates.put(copy.nodeId(), ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKSUM_DIVERGENT);
+                    mergeNodeState(
+                            nodeStates, copy.nodeId(), ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKSUM_DIVERGENT);
                 }
                 ambiguousCopies += entry.getValue().size();
                 membership.recordRepairStatus(ReplicaRepairStatus.newBuilder()
@@ -144,11 +146,10 @@ public final class ReplicaRepairCoordinator implements AutoCloseable {
             String sourceNode = sourceNode(entry.getValue(), source);
             if (sourceNode == null) {
                 for (NodeManifest copy : entry.getValue()) {
-                    nodeStates.put(copy.nodeId(), ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKING);
+                    mergeNodeState(nodeStates, copy.nodeId(), ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKING);
                 }
                 for (String target : expectedNodes(source)) {
-                    nodeStates.computeIfPresent(
-                            target, (ignored, current) -> ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKING);
+                    mergeNodeState(nodeStates, target, ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKING);
                 }
                 continue;
             }
@@ -162,11 +163,7 @@ public final class ReplicaRepairCoordinator implements AutoCloseable {
                         manifests.getOrDefault(target, Map.of()).get(entry.getKey());
                 ReplicaRepairState state = classify(source, actual);
                 if (state != ReplicaRepairState.REPLICA_REPAIR_STATE_READY) {
-                    nodeStates.computeIfPresent(
-                            target,
-                            (ignored, current) -> current == ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKSUM_DIVERGENT
-                                    ? current
-                                    : ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKING);
+                    mergeNodeState(nodeStates, target, ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKING);
                     candidates.add(new RepairCandidate(entry.getKey(), sourceNode, target, source, state));
                 }
             }
@@ -180,6 +177,15 @@ public final class ReplicaRepairCoordinator implements AutoCloseable {
         for (RepairCandidate candidate : candidates.stream().limit(admitted).toList()) {
             repair(candidate);
         }
+    }
+
+    private static void mergeNodeState(
+            Map<String, ReplicaRepairState> nodeStates, String nodeId, ReplicaRepairState state) {
+        nodeStates.merge(
+                nodeId,
+                state,
+                (current, update) ->
+                        current == ReplicaRepairState.REPLICA_REPAIR_STATE_CHECKSUM_DIVERGENT ? current : update);
     }
 
     private Map<String, Map<String, ReplicaManifest>> inspectHealthyNodes() {
