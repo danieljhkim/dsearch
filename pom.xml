@@ -30,7 +30,7 @@
 
     <properties>
         <!-- Update this once per release. Development commits use the -SNAPSHOT suffix. -->
-        <revision>2.0.0</revision>
+        <revision>2.0.1</revision>
         <maven.compiler.release>21</maven.compiler.release>
         <spring.boot.version>4.1.1</spring.boot.version>
         <tomcat.version>11.0.25</tomcat.version>

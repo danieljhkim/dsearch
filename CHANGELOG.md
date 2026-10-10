@@ -11,6 +11,14 @@ This project follows a **Keep a Changelog–inspired** format and adheres loosel
 
 ## [Unreleased]
 
+## [2.0.1] — 2026-10-10
+
+Republishes 2.0.0 after its image publication failed. No application changes.
+
+### Fixed
+- Release workflow verifies SBOM attestations with the SPDX 2.3 predicate type (#179)
+- Release workflow computes the `latest` promotion guard in the step that uses it
+
 ## [2.0.0] — 2026-10-10
 
 Actuator `info`, `metrics`, and `prometheus` now require a bearer token. Before scrape:
