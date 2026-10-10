@@ -297,7 +297,7 @@ jobs:
               --predicate-type https://slsa.dev/provenance/v1
             gh attestation verify "oci://$reference" \
               "${verify_args[@]}" \
-              --predicate-type https://spdx.dev/Document
+              --predicate-type https://spdx.dev/Document/v2.3
           done
 
       - name: Verify exact image labels match the release
