@@ -88,9 +88,14 @@ Edit `app-config.yaml` → `fieldConfigs` section. Fields define: filterable, so
 
 ### Debugging
 ```bash
+# Set this before starting the local cluster so the gateway can serve protected Actuator endpoints.
+export DSEARCH_ADMIN_TOKEN="$(openssl rand -hex 32)"
+make run
+
 curl http://localhost:8080/health              # Gateway health
 curl http://localhost:8080/cluster/health      # Cluster health
-curl http://localhost:8080/actuator/prometheus # Metrics
+curl -H "Authorization: Bearer $DSEARCH_ADMIN_TOKEN" \
+  http://localhost:8080/actuator/prometheus     # Metrics
 tail -f logs/index-node-0.log                  # Node logs
 ```
 
