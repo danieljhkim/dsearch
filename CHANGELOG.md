@@ -17,6 +17,7 @@ Republishes 2.0.0 after the 2.0.1 image build failed on a test timing flake. No 
 
 ### Fixed
 - `QueryNodeApplicationTest` waits for the expected health status instead of taking the first response
+- `ApiFilterAccessIntegrationTest` waits for the admission permit to return before asserting re-admission
 - Image builds no longer re-run the test suite already run by release verification
 
 ## [2.0.1] — 2026-10-10
