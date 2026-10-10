@@ -11,6 +11,14 @@ This project follows a **Keep a Changelog–inspired** format and adheres loosel
 
 ## [Unreleased]
 
+## [2.0.2] — 2026-10-10
+
+Republishes 2.0.0 after the 2.0.1 image build failed on a test timing flake. No application changes.
+
+### Fixed
+- `QueryNodeApplicationTest` waits for the expected health status instead of taking the first response
+- Image builds no longer re-run the test suite already run by release verification
+
 ## [2.0.1] — 2026-10-10
 
 Republishes 2.0.0 after its image publication failed. No application changes.
