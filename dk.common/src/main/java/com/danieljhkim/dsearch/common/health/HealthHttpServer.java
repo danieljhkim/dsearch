@@ -39,11 +39,24 @@ public final class HealthHttpServer {
      * {@code reason} otherwise. Any non-GET request returns {@code 405}.
      */
     public static HttpServer start(int port, String serviceName, Supplier<Readiness> readiness) throws IOException {
+        return start(port, serviceName, readiness, null);
+    }
+
+    /**
+     * Starts liveness and readiness endpoints, with an optional process-local detail on {@code /health}.
+     *
+     * <p>The detail supplier is not the readiness probe. Liveness must stay independent of disk and
+     * dependency checks, so {@code /health} remains HTTP 200. When the supplier returns a non-blank
+     * string, the body adds {@code readiness=DOWN} and the same {@code reason} an operator would
+     * read from {@code /readyz}. {@code /livez} never includes it.
+     */
+    public static HttpServer start(
+            int port, String serviceName, Supplier<Readiness> readiness, Supplier<String> healthDetail)
+            throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
-        HealthHandler livenessHandler = new HealthHandler(serviceName, null);
-        server.createContext("/health", livenessHandler);
-        server.createContext("/livez", livenessHandler);
-        server.createContext("/readyz", new HealthHandler(serviceName, readiness));
+        server.createContext("/health", new HealthHandler(serviceName, null, healthDetail));
+        server.createContext("/livez", new HealthHandler(serviceName, null, null));
+        server.createContext("/readyz", new HealthHandler(serviceName, readiness, null));
         server.createContext("/metrics", new MetricsHandler());
         ExecutorService executor = Executors.newSingleThreadExecutor(r -> {
             Thread t = new Thread(r, serviceName + "-health-http");
@@ -76,10 +89,12 @@ public final class HealthHttpServer {
 
         private final String serviceName;
         private final Supplier<Readiness> readiness;
+        private final Supplier<String> healthDetail;
 
-        private HealthHandler(String serviceName, Supplier<Readiness> readiness) {
+        private HealthHandler(String serviceName, Supplier<Readiness> readiness, Supplier<String> healthDetail) {
             this.serviceName = serviceName;
             this.readiness = readiness;
+            this.healthDetail = healthDetail;
         }
 
         @Override
@@ -89,16 +104,37 @@ public final class HealthHttpServer {
                 exchange.close();
                 return;
             }
-            Readiness result = readiness == null ? Readiness.up() : safelyCheckReadiness();
+            if (readiness != null) {
+                writeReadiness(exchange, safelyCheckReadiness());
+                return;
+            }
+            writeLiveness(exchange, readHealthDetail());
+        }
+
+        private void writeReadiness(HttpExchange exchange, Readiness result) throws IOException {
             String body = String.format(
                     "{\"status\":\"%s\",\"service\":\"%s\",\"timestamp\":\"%s\"%s}",
                     result.ready() ? "UP" : "DOWN",
                     serviceName,
                     Instant.now(),
                     result.ready() ? "" : ",\"reason\":\"" + escapeJson(result.reason()) + "\"");
+            write(exchange, result.ready() ? 200 : 503, body);
+        }
+
+        private void writeLiveness(HttpExchange exchange, String detail) throws IOException {
+            String extra = "";
+            if (detail != null && !detail.isBlank()) {
+                extra = ",\"readiness\":\"DOWN\",\"reason\":\"" + escapeJson(detail) + "\"";
+            }
+            String body = String.format(
+                    "{\"status\":\"UP\",\"service\":\"%s\",\"timestamp\":\"%s\"%s}", serviceName, Instant.now(), extra);
+            write(exchange, 200, body);
+        }
+
+        private static void write(HttpExchange exchange, int status, String body) throws IOException {
             byte[] responseBytes = body.getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", "application/json");
-            exchange.sendResponseHeaders(result.ready() ? 200 : 503, responseBytes.length);
+            exchange.sendResponseHeaders(status, responseBytes.length);
             try (OutputStream os = exchange.getResponseBody()) {
                 os.write(responseBytes);
             }
@@ -115,8 +151,24 @@ public final class HealthHttpServer {
             }
         }
 
+        private String readHealthDetail() {
+            if (healthDetail == null) {
+                return null;
+            }
+            try {
+                return healthDetail.get();
+            } catch (RuntimeException e) {
+                LOGGER.warning(() -> "Health detail failed for " + serviceName + ": " + e);
+                return "health_detail_failed:" + e.getClass().getSimpleName();
+            }
+        }
+
         private static String escapeJson(String value) {
-            return value.replace("\\", "\\\\").replace("\"", "\\\"");
+            return value.replace("\\", "\\\\")
+                    .replace("\"", "\\\"")
+                    .replace("\n", "\\n")
+                    .replace("\r", "\\r")
+                    .replace("\t", "\\t");
         }
     }
 
