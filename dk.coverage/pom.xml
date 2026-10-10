@@ -19,6 +19,11 @@
     -->
     <dependencies>
         <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-webmvc</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>com.danieljhkim.dsearch</groupId>
             <artifactId>dk.common</artifactId>
             <version>${project.version}</version>

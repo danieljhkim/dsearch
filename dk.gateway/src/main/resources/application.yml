@@ -35,3 +35,7 @@ management:
   metrics:
     tags:
       application: dsearch-gateway
+  prometheus:
+    metrics:
+      export:
+        enabled: true
