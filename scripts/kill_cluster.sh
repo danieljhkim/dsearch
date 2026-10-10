@@ -2,22 +2,69 @@
 
 echo "Stopping Distributed Search Engine cluster..."
 
-# Grep patterns for each module
+# Match the exact jar filenames in each Java command line.
 PATTERNS=(
-  "dk.coordinator*.jar"
-  "dk.index-node*.jar"
-  "dk.query-node*.jar"
-  "dk.gateway*.jar"
+  '(^|/)dk-coordinator\.jar([[:space:]]|$)'
+  '(^|/)dk-index-node\.jar([[:space:]]|$)'
+  '(^|/)dk-query-node\.jar([[:space:]]|$)'
+  '(^|/)dk-gateway\.jar([[:space:]]|$)'
 )
 
-for pattern in "${PATTERNS[@]}"; do
-  PIDS=$(pgrep -f "$pattern")
-  if [[ -n "$PIDS" ]]; then
-    echo "Killing processes for: $pattern (PIDs: $PIDS)"
-    kill $PIDS 2>/dev/null || true
-  else
-    echo "No running processes for: $pattern"
+cluster_pids() {
+  local pattern matches status pids=""
+
+  for pattern in "${PATTERNS[@]}"; do
+    matches=$(pgrep -f "$pattern")
+    status=$?
+    if (( status > 1 )); then
+      echo "pgrep failed for pattern $pattern (status $status)." >&2
+      return "$status"
+    fi
+    if (( status == 0 )); then
+      pids+="${matches}"$'\n'
+    fi
+  done
+
+  if [[ -n "$pids" ]]; then
+    printf '%s' "$pids" | awk 'NF && !seen[$0]++ { printf "%s%s", separator, $0; separator = " " } END { if (separator != "") printf "\n" }'
+  fi
+}
+
+if ! PIDS=$(cluster_pids); then
+  echo "Unable to inspect cluster processes; stop was not confirmed." >&2
+  exit 1
+fi
+
+if [[ -z "$PIDS" ]]; then
+  echo "No running cluster JVMs found."
+  echo "Done."
+  exit 0
+fi
+
+echo "Sending SIGTERM to cluster processes (PIDs: $PIDS)"
+for pid in $PIDS; do
+  if kill -0 "$pid" 2>/dev/null && ! kill -TERM "$pid" 2>/dev/null; then
+    echo "Failed to send SIGTERM to PID $pid." >&2
   fi
 done
 
-echo "Done."
+deadline=$((SECONDS + 15))
+while true; do
+  if ! REMAINING=$(cluster_pids); then
+    echo "Unable to inspect cluster processes while waiting for shutdown." >&2
+    exit 1
+  fi
+
+  if [[ -z "$REMAINING" ]]; then
+    echo "All cluster JVMs exited."
+    echo "Done."
+    exit 0
+  fi
+
+  if (( SECONDS >= deadline )); then
+    echo "Timed out after 15 seconds waiting for cluster JVMs to exit; surviving PIDs: $REMAINING" >&2
+    exit 1
+  fi
+
+  sleep 1
+done
