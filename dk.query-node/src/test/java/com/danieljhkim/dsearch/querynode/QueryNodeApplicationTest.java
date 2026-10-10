@@ -32,10 +32,10 @@ class QueryNodeApplicationTest {
         ExecutorService starter = Executors.newSingleThreadExecutor();
         Future<?> started = starter.submit(() -> start(runtime));
         try {
-            HttpResponse<String> health = awaitHealth(healthPort);
+            HttpResponse<String> health = awaitStatus(healthPort, "/health", 200);
             assertEquals(200, health.statusCode());
             assertTrue(health.body().contains("\"service\":\"query-node\""));
-            assertEquals(200, awaitEndpoint(healthPort, "/readyz").statusCode());
+            assertEquals(200, awaitStatus(healthPort, "/readyz", 200).statusCode());
 
             Field managerField = QueryNodeRuntime.class.getDeclaredField("nodeClientManager");
             managerField.setAccessible(true);
@@ -44,13 +44,13 @@ class QueryNodeApplicationTest {
             activeClients.setAccessible(true);
             activeClients.set(manager, List.of());
 
-            HttpResponse<String> dependencyLoss = awaitEndpoint(healthPort, "/readyz");
+            HttpResponse<String> dependencyLoss = awaitStatus(healthPort, "/readyz", 503);
             assertEquals(503, dependencyLoss.statusCode());
             assertTrue(dependencyLoss.body().contains("index_model_or_topology_not_ready"));
-            assertEquals(200, awaitEndpoint(healthPort, "/livez").statusCode());
+            assertEquals(200, awaitStatus(healthPort, "/livez", 200).statusCode());
 
             activeClients.set(manager, List.copyOf(manager.getClientMap().values()));
-            assertEquals(200, awaitEndpoint(healthPort, "/readyz").statusCode());
+            assertEquals(200, awaitStatus(healthPort, "/readyz", 200).statusCode());
         } finally {
             runtime.close();
             started.get(5, TimeUnit.SECONDS);
@@ -143,25 +143,31 @@ class QueryNodeApplicationTest {
         }
     }
 
-    private static HttpResponse<String> awaitHealth(int port) throws Exception {
-        return awaitEndpoint(port, "/health");
-    }
-
-    private static HttpResponse<String> awaitEndpoint(int port, String path) throws Exception {
+    /**
+     * Polls until the endpoint answers with {@code expected}. The health server starts before the
+     * runtime finishes wiring, so an early answer may legitimately be 503.
+     */
+    private static HttpResponse<String> awaitStatus(int port, String path, int expected) throws Exception {
         HttpClient client = HttpClient.newHttpClient();
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
+                .GET()
+                .build();
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        HttpResponse<String> last = null;
         IOException lastFailure = null;
         while (System.nanoTime() < deadline) {
             try {
-                return client.send(
-                        HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
-                                .GET()
-                                .build(),
-                        HttpResponse.BodyHandlers.ofString());
+                last = client.send(request, HttpResponse.BodyHandlers.ofString());
+                if (last.statusCode() == expected) {
+                    return last;
+                }
             } catch (IOException e) {
                 lastFailure = e;
-                Thread.yield();
             }
+            Thread.sleep(20);
+        }
+        if (last != null) {
+            return last;
         }
         throw lastFailure;
     }
