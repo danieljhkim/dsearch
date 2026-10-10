@@ -25,11 +25,8 @@ public final class AdminAuthFilter extends OncePerRequestFilter {
         this.token = token == null ? "" : token;
     }
 
-    @Override
-    protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !request.getRequestURI().startsWith("/api/v1/admin/");
-    }
-
+    // GatewayConfig registers this filter on the container-normalized servlet URL pattern.
+    // A second check against the raw URI would skip encoded or matrix-parameter paths.
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {

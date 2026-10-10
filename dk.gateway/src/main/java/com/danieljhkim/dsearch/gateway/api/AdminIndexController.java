@@ -20,12 +20,14 @@ import jakarta.validation.Valid;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/v1/admin")
@@ -125,7 +127,10 @@ public class AdminIndexController {
 
     private static String actor(HttpServletRequest request) {
         Object actor = request.getAttribute(AdminAuthFilter.ACTOR_ATTRIBUTE);
-        return actor instanceof String value && !value.isBlank() ? value : AdminAuthFilter.ADMIN_ACTOR;
+        if (!(actor instanceof String value) || value.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "missing authenticated admin actor");
+        }
+        return value;
     }
 
     public record ReplicaRepairsResponse(boolean paused, List<RepairStatus> repairs) {}
