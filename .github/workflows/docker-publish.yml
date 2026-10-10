@@ -305,15 +305,6 @@ jobs:
         run: |
           set -euo pipefail
           source release-evidence/images.env
-          source scripts/docker-publish-latest-guard.sh
-          newest_eligible_tag=$(git ls-remote --tags --refs origin 'v*.*.*' | \
-            awk '{sub("refs/tags/", "", $2); print $2}' | \
-            latest_eligible_release_tag)
-          may_promote_latest=false
-          if [[ "$IS_RC" != "true" ]] && release_tag_may_promote_latest "$GITHUB_REF_NAME" "$newest_eligible_tag"; then
-            may_promote_latest=true
-          fi
-
           for service in dk.index-node dk.query-node dk.coordinator dk.gateway; do
             variable=$(printf 'DSEARCH_%s_IMAGE' "${service#dk.}" | tr '[:lower:].-' '[:upper:]__')
             reference=${!variable}
@@ -364,6 +355,15 @@ jobs:
         run: |
           set -euo pipefail
           source release-evidence/images.env
+          source scripts/docker-publish-latest-guard.sh
+          newest_eligible_tag=$(git ls-remote --tags --refs origin 'v*.*.*' | \
+            awk '{sub("refs/tags/", "", $2); print $2}' | \
+            latest_eligible_release_tag)
+          may_promote_latest=false
+          if [[ "$IS_RC" != "true" ]] && release_tag_may_promote_latest "$GITHUB_REF_NAME" "$newest_eligible_tag"; then
+            may_promote_latest=true
+          fi
+
           for service in dk.index-node dk.query-node dk.coordinator dk.gateway; do
             variable=$(printf 'DSEARCH_%s_IMAGE' "${service#dk.}" | tr '[:lower:].-' '[:upper:]__')
             source_reference=${!variable}
