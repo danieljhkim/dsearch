@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -59,6 +60,7 @@ class AdminIndexControllerTest {
                 .thenReturn(audit("alias-rollback", "movies", "movies_1", "movies_2"));
 
         mockMvc.perform(post("/api/v1/admin/indexes")
+                        .requestAttr(AdminAuthFilter.ACTOR_ATTRIBUTE, AdminAuthFilter.ADMIN_ACTOR)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"indexName\":\"movies_1\",\"alias\":\"movies\"}"))
                 .andExpect(status().isOk())
@@ -66,12 +68,14 @@ class AdminIndexControllerTest {
                 .andExpect(jsonPath("$.operation").value("create-index"))
                 .andExpect(jsonPath("$.success").value(true));
 
-        mockMvc.perform(get("/api/v1/admin/indexes/movies/schema"))
+        mockMvc.perform(get("/api/v1/admin/indexes/movies/schema")
+                        .requestAttr(AdminAuthFilter.ACTOR_ATTRIBUTE, AdminAuthFilter.ADMIN_ACTOR))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.compatibilityVersion").value(1))
                 .andExpect(jsonPath("$.embedding.dimension").value(384));
 
         mockMvc.perform(post("/api/v1/admin/indexes/movies/analyze")
+                        .requestAttr(AdminAuthFilter.ACTOR_ATTRIBUTE, AdminAuthFilter.ADMIN_ACTOR)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"text\":\"Interstellar\"}"))
                 .andExpect(status().isOk())
@@ -80,22 +84,41 @@ class AdminIndexControllerTest {
                 .andExpect(jsonPath("$.truncated").value(false));
 
         mockMvc.perform(post("/api/v1/admin/indexes/movies/reindex")
+                        .requestAttr(AdminAuthFilter.ACTOR_ATTRIBUTE, AdminAuthFilter.ADMIN_ACTOR)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"targetIndex\":\"movies_2\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.operation").value("reindex"));
 
         mockMvc.perform(post("/api/v1/admin/aliases/swap")
+                        .requestAttr(AdminAuthFilter.ACTOR_ATTRIBUTE, AdminAuthFilter.ADMIN_ACTOR)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"alias\":\"movies\",\"targetIndex\":\"movies_2\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.operation").value("alias-swap"));
 
-        mockMvc.perform(post("/api/v1/admin/aliases/movies/rollback"))
+        mockMvc.perform(post("/api/v1/admin/aliases/movies/rollback")
+                        .requestAttr(AdminAuthFilter.ACTOR_ATTRIBUTE, AdminAuthFilter.ADMIN_ACTOR))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.operation").value("alias-rollback"));
 
-        verify(adminIndexService).createIndex(any(), any());
+        verify(adminIndexService).createIndex(any(), eq(AdminAuthFilter.ADMIN_ACTOR));
+    }
+
+    @Test
+    void missingOrInvalidActorNeverReachesTheAuditService() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/indexes")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"indexName\":\"movies_1\",\"alias\":\"movies\"}"))
+                .andExpect(status().isUnauthorized());
+        for (Object actor : new Object[] {"", "   ", 123}) {
+            mockMvc.perform(post("/api/v1/admin/indexes")
+                            .requestAttr(AdminAuthFilter.ACTOR_ATTRIBUTE, actor)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"indexName\":\"movies_1\",\"alias\":\"movies\"}"))
+                    .andExpect(status().isUnauthorized());
+        }
+        verifyNoInteractions(adminIndexService);
     }
 
     @Test

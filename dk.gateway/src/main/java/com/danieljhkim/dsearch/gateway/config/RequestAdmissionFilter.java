@@ -35,11 +35,8 @@ public final class RequestAdmissionFilter extends OncePerRequestFilter {
         this.admission = new Semaphore(Math.max(1, limits.getMaxConcurrentHttpRequests()), true);
     }
 
-    @Override
-    protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !request.getRequestURI().startsWith("/api/");
-    }
-
+    // GatewayConfig registers this filter on the container-normalized servlet URL pattern.
+    // A second check against the raw URI would skip encoded or matrix-parameter paths.
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
