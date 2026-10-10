@@ -168,6 +168,7 @@ public class ShardIndex implements Closeable {
         IndexWriter indexWriter = null;
         SearcherManager searcherManager = null;
         Closeable ownedEmbeddingService = null;
+        Path shardDirectory = baseDir;
         try {
             this.shardId = shardId;
             this.serving = serving;
@@ -178,6 +179,7 @@ public class ShardIndex implements Closeable {
                 throw new IllegalArgumentException(
                         "partitionId '" + shardId + "' resolves outside the index base directory");
             }
+            shardDirectory = resolved;
             this.indexPath = resolved;
             Files.createDirectories(indexPath);
 
@@ -225,7 +227,10 @@ public class ShardIndex implements Closeable {
             this.textHighlighter = new TextHighlighter();
             this.facetCalculator = new FacetCalculator();
         } catch (IOException e) {
-            RuntimeException wrapped = new RuntimeException("Failed to initialize ShardIndex for shard " + shardId, e);
+            UnreadableShardException unreadable = UnreadableShardException.translate(shardId, shardDirectory, e);
+            RuntimeException wrapped = unreadable != null
+                    ? unreadable
+                    : new RuntimeException("Failed to initialize ShardIndex for shard " + shardId, e);
             closeInitializingResources(
                     wrapped, searcherManager, indexWriter, directory, analyzer, ownedEmbeddingService);
             throw wrapped;
