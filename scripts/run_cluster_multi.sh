@@ -142,14 +142,14 @@ start_query_nodes() {
     nohup java -jar "$QUERY_NODE_JAR" \
       > "$LOG_DIR/query-node-$i.log" 2>&1 &
 
-    echo "Query Node #$i started (NODE_ID=$node_id, PORT=$port, DATA=$node_data_dir)"
+    echo "Query Node #$i started (NODE_ID=$node_id, PORT=$port)"
   done
 }
 
 start_gateway() {
   echo "Starting Gateway..."
 
-  # Gateway can talk to coordinator for health-aware node discovery; shard-map RPC is deferred.
+  # Gateway can talk to coordinator for health-aware node discovery and shard-map lookup.
   export COORDINATOR_HOST="localhost"
   export COORDINATOR_PORT
   export SERVER_PORT="$GATEWAY_PORT"   # Spring Boot
@@ -216,7 +216,6 @@ echo "Coordinator : localhost:${COORDINATOR_PORT}"
 echo "Index Nodes : ${N_INDEX_NODES} (ports ${INDEX_BASE_PORT}..$((INDEX_BASE_PORT + N_INDEX_NODES - 1)))"
 echo "Query Nodes : ${N_QUERY_NODES} (ports ${QUERY_BASE_PORT}..$((QUERY_BASE_PORT + N_QUERY_NODES - 1)))"
 echo "Gateway     : http://localhost:${GATEWAY_PORT}"
-echo "Shards      : ${NUM_SHARDS}"
 echo "================================================="
 
 read_local_topology
@@ -243,5 +242,5 @@ echo "================================================="
 echo "Cluster is running!"
 echo "Logs  : $LOG_DIR"
 echo "Data  : $DATA_DIR"
-echo "Stop  : ./run_cluster_multi.sh stop"
+echo "Stop  : make stop"
 echo "================================================="
