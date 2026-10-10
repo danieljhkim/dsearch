@@ -63,7 +63,8 @@ class CoordinatorProcessIntegrationTest {
             firstNode.close();
             firstNode = null;
             StatusRuntimeException unavailable = assertThrows(
-                    StatusRuntimeException.class, () -> client.withDeadlineAfter(250, TimeUnit.MILLISECONDS)
+                    StatusRuntimeException.class,
+                    () -> client.withDeadlineAfter(250, TimeUnit.MILLISECONDS)
                             .getShardMap(GetShardMapRequest.getDefaultInstance()));
             assertEquals(Status.Code.UNAVAILABLE, unavailable.getStatus().getCode());
 

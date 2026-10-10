@@ -430,8 +430,8 @@ class GatewayIndexServiceTest {
         verify(indexNodeClientManager, never()).ownerClient(any(), any());
 
         limits.setMaxBulkItems(2);
-        assertThatThrownBy(
-                        () -> service.bulkIndex(bulkRequest(null, indexRequest("doc-1", Map.of("title", "too long")))))
+        assertThatThrownBy(() ->
+                        service.bulkIndex(bulkRequest(null, indexRequest("doc-1", Map.of("title", "too long")))))
                 .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
                 .hasMessageContaining("Bulk embedding bytes");
         verify(indexNodeClientManager, never()).ownerClient(any(), any());
