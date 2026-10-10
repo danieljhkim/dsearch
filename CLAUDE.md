@@ -11,7 +11,7 @@ Maven `revision` with a `-SNAPSHOT` suffix. To publish a release, set that one v
 release version on `main`, tag the resulting commit as `v<version>`, and let the publish workflow
 verify the branch, Maven version, and image tag before it pushes images.
 
-**Tech Stack**: Java 21, Maven, Apache Lucene 9.8.0, gRPC (inter-service), Spring Boot (REST API), DJL/PyTorch (embeddings)
+**Tech Stack**: Java 21, Maven, Apache Lucene 10.5.0, gRPC (inter-service), Spring Boot (REST API), DJL/PyTorch (embeddings)
 
 ## Build & Run Commands
 
