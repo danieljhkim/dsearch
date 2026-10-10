@@ -75,15 +75,17 @@ class SortSpecTest {
 
     @Test
     void rejectsUnknownAndNonSortableFields() {
-        assertTrue(assertThrows(IllegalArgumentException.class, () -> SortSpec.effective(
-                                List.of(field("nope", SortOrder.SORT_ORDER_ASC)), false)
-                        .validateAgainst(SCHEMA))
+        assertTrue(assertThrows(
+                        IllegalArgumentException.class,
+                        () -> SortSpec.effective(List.of(field("nope", SortOrder.SORT_ORDER_ASC)), false)
+                                .validateAgainst(SCHEMA))
                 .getMessage()
                 .contains("Unknown sort field"));
 
-        assertTrue(assertThrows(IllegalArgumentException.class, () -> SortSpec.effective(
-                                List.of(field("body", SortOrder.SORT_ORDER_ASC)), false)
-                        .validateAgainst(SCHEMA))
+        assertTrue(assertThrows(
+                        IllegalArgumentException.class,
+                        () -> SortSpec.effective(List.of(field("body", SortOrder.SORT_ORDER_ASC)), false)
+                                .validateAgainst(SCHEMA))
                 .getMessage()
                 .contains("not sortable"));
     }

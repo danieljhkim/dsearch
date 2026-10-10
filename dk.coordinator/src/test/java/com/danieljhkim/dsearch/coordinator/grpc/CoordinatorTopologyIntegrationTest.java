@@ -88,9 +88,11 @@ class CoordinatorTopologyIntegrationTest {
 
         ClusterServiceGrpc.ClusterServiceBlockingStub unavailableClient = recovered.stub();
         recovered.stopServer();
-        StatusRuntimeException unavailable = assertThrows(StatusRuntimeException.class, () -> unavailableClient
-                .withDeadlineAfter(250, TimeUnit.MILLISECONDS)
-                .getShardMap(GetShardMapRequest.getDefaultInstance()));
+        StatusRuntimeException unavailable = assertThrows(
+                StatusRuntimeException.class,
+                () -> unavailableClient
+                        .withDeadlineAfter(250, TimeUnit.MILLISECONDS)
+                        .getShardMap(GetShardMapRequest.getDefaultInstance()));
         assertEquals(Status.Code.UNAVAILABLE, unavailable.getStatus().getCode());
         recovered.closeChannel();
     }

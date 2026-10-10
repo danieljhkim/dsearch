@@ -351,8 +351,9 @@ class ProtoWireContractTest {
         FileDescriptorProto.Builder changedIndex = index.toBuilder();
         changedIndex.setMessageType(index.getMessageTypeList().indexOf(request), changedRequest.build());
 
-        AssertionError error = assertThrows(AssertionError.class, () -> ContractBaseline.load()
-                .assertCompatible(replaceFile(original, changedIndex.build())));
+        AssertionError error = assertThrows(
+                AssertionError.class,
+                () -> ContractBaseline.load().assertCompatible(replaceFile(original, changedIndex.build())));
         assertTrue(error.getMessage().contains("IndexDocumentRequest"));
         assertTrue(error.getMessage().contains("partition_id"));
     }
@@ -588,9 +589,10 @@ class ProtoWireContractTest {
         private static void requireEnum(Map<String, FileDescriptorProto> files, BaselineEntry entry) {
             FileDescriptorProto file = requiredFile(files, entry.values().get(0));
             assertTrue(
-                    file.getEnumTypeList().stream().anyMatch(enumDescriptor -> enumDescriptor
-                            .getName()
-                            .equals(entry.values().get(1))),
+                    file.getEnumTypeList().stream()
+                            .anyMatch(enumDescriptor -> enumDescriptor
+                                    .getName()
+                                    .equals(entry.values().get(1))),
                     "Missing enum " + entry.values().get(1));
         }
 
@@ -621,8 +623,9 @@ class ProtoWireContractTest {
         private static void requireService(Map<String, FileDescriptorProto> files, BaselineEntry entry) {
             FileDescriptorProto file = requiredFile(files, entry.values().get(0));
             assertTrue(
-                    file.getServiceList().stream().anyMatch(service -> service.getName()
-                            .equals(entry.values().get(1))),
+                    file.getServiceList().stream()
+                            .anyMatch(service ->
+                                    service.getName().equals(entry.values().get(1))),
                     "Missing service " + entry.values().get(1));
         }
 
