@@ -32,7 +32,7 @@
         <!-- Update this once per release. Development commits use the -SNAPSHOT suffix. -->
         <revision>1.1.0-SNAPSHOT</revision>
         <maven.compiler.release>21</maven.compiler.release>
-        <spring.boot.version>3.5.16</spring.boot.version>
+        <spring.boot.version>4.1.1</spring.boot.version>
         <grpc.version>1.84.0</grpc.version>
         <protobuf.version>3.25.9</protobuf.version>
         <lucene.version>10.5.0</lucene.version>
@@ -94,13 +94,6 @@
                 <version>${spring.boot.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
-            </dependency>
-
-            <!-- Override Spring Boot 3.5.16's vulnerable Tomcat 10.1.55 baseline. -->
-            <dependency>
-                <groupId>org.apache.tomcat.embed</groupId>
-                <artifactId>tomcat-embed-core</artifactId>
-                <version>10.1.59</version>
             </dependency>
 
             <!-- gRPC -->

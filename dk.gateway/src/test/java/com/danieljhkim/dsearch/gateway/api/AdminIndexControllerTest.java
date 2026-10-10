@@ -28,10 +28,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = AdminIndexController.class)
@@ -41,10 +41,10 @@ class AdminIndexControllerTest {
     @jakarta.annotation.Resource
     private MockMvc mockMvc;
 
-    @MockBean
+    @MockitoBean
     private GatewayAdminIndexService adminIndexService;
 
-    @MockBean(name = "clusterNodeClientManager")
+    @MockitoBean(name = "clusterNodeClientManager")
     private NodeClientManager<ClusterServiceGrpc.ClusterServiceBlockingStub> clusterNodeClientManager;
 
     @Test
