@@ -224,7 +224,7 @@ curl -X POST http://localhost:8080/api/v1/search \
 
 Stop when a response has no `nextCursor`. `cursor` cannot be combined with `page`, and changing the
 query, filters, sort, or `pageSize` mid-traversal invalidates the cursor rather than silently
-returning results from a different result set. See the README for the full rules, including why
+returning results from a different result set. See [API reference](./API.md#sorting-and-cursor-pagination) for the full rules, including why
 `SEMANTIC` and `HYBRID` search use offset paging instead.
 
 ### Stop the cluster
