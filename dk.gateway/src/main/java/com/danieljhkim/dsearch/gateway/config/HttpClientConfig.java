@@ -1,7 +1,7 @@
 package com.danieljhkim.dsearch.gateway.config;
 
 import java.time.Duration;
-import org.springframework.boot.web.client.RestTemplateBuilder;
+import org.springframework.boot.restclient.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.client.RestTemplate;
@@ -11,8 +11,8 @@ public class HttpClientConfig {
 
     @Bean
     public RestTemplate restTemplate(RestTemplateBuilder builder) {
-        return builder.setConnectTimeout(Duration.ofMillis(300))
-                .setReadTimeout(Duration.ofMillis(500))
+        return builder.connectTimeout(Duration.ofMillis(300))
+                .readTimeout(Duration.ofMillis(500))
                 .build();
     }
 }

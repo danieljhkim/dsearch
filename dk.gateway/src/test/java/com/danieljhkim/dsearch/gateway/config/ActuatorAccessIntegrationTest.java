@@ -10,7 +10,7 @@ import java.net.http.HttpResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
-import org.springframework.boot.test.autoconfigure.actuate.observability.AutoConfigureObservability;
+import org.springframework.boot.micrometer.metrics.test.autoconfigure.AutoConfigureMetrics;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
@@ -20,7 +20,7 @@ import org.springframework.http.HttpStatus;
         classes = ActuatorAccessIntegrationTest.TestApplication.class,
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = "dsearch.admin.token=integration-secret")
-@AutoConfigureObservability
+@AutoConfigureMetrics
 class ActuatorAccessIntegrationTest {
 
     @LocalServerPort
