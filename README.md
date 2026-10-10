@@ -2,7 +2,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Java-21-007396?style=for-the-badge&logo=openjdk&logoColor=white">
-  <img src="https://img.shields.io/badge/Apache_Lucene-9.x-orange?style=for-the-badge&logo=apache&logoColor=white">
+  <img src="https://img.shields.io/badge/Apache_Lucene-10.x-orange?style=for-the-badge&logo=apache&logoColor=white">
   <img src="https://img.shields.io/badge/gRPC-1.x-34A7C1?style=for-the-badge&logo=grpc&logoColor=white">
   <img src="https://img.shields.io/badge/Spring_Boot-3.x-6DB33F?style=for-the-badge&logo=springboot&logoColor=white">
   <img src="https://img.shields.io/badge/Vector_Search-Embeddings-4B0082?style=for-the-badge&logo=target&logoColor=white">
