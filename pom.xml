@@ -54,7 +54,7 @@
         <!-- Testing -->
         <mockito.version>5.24.0</mockito.version>
         <!-- Serialization / config -->
-        <jackson.version>2.21.7</jackson.version>
+        <jackson.version>2.22.3</jackson.version>
         <!-- Jackson 3 (tools.jackson group) is versioned separately from the com.fasterxml 2.x line above. -->
         <jackson3.version>3.1.7</jackson3.version>
         <snakeyaml.version>2.4</snakeyaml.version>
