@@ -49,7 +49,7 @@
         <coverage.minimum.branch>0.0000</coverage.minimum.branch>
         <jacoco.version>0.8.15</jacoco.version>
         <!-- Observability -->
-        <micrometer.registry.prometheus.version>1.17.1</micrometer.registry.prometheus.version>
+        <micrometer.registry.prometheus.version>1.17.2</micrometer.registry.prometheus.version>
         <prometheus.simpleclient.version>0.16.0</prometheus.simpleclient.version>
         <!-- Testing -->
         <mockito.version>5.24.0</mockito.version>
