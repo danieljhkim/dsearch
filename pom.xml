@@ -56,7 +56,7 @@
         <!-- Serialization / config -->
         <jackson.version>2.22.3</jackson.version>
         <!-- Jackson 3 (tools.jackson group) is versioned separately from the com.fasterxml 2.x line above. -->
-        <jackson3.version>3.1.7</jackson3.version>
+        <jackson3.version>3.2.4</jackson3.version>
         <snakeyaml.version>2.4</snakeyaml.version>
         <!-- ML -->
         <djl.version>0.38.0</djl.version>
